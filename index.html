@@ -17,6 +17,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .title{display:flex;align-items:baseline;gap:11px}
 .title h1{font-size:18px;letter-spacing:.04em;font-weight:800}
 .title .meta{font-size:11px;color:var(--sub)}
+.conn-ind{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto}
+.conn-ind.on{background:#d1fae5;color:#047857}
+.conn-ind.off{background:#fee2e2;color:#b91c1c}
 .toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .tabs{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:3px}
 .tab{padding:6px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;color:var(--sub);border:none;background:none;font-family:inherit;transition:.15s}
@@ -174,7 +177,7 @@ input[type=file]{display:none}
 </head>
 <body>
 <header>
-  <div class="title"><h1>配置ダッシュボード</h1><span class="meta" id="floorMeta"></span></div>
+  <div class="title"><h1>配置ダッシュボード</h1><span class="meta" id="floorMeta"></span><span class="conn-ind off" id="connIndicator" title="クラウド同期状態">● 接続確認中</span></div>
   <div class="toolbar">
     <div class="search-wrap">
       <input class="search" id="search" placeholder="氏名で検索...">
@@ -288,6 +291,7 @@ input[type=file]{display:none}
         <div class="setting-info">
           <div>アプリバージョン: <b id="appVer">―</b></div>
           <div>最終更新確認: <b id="lastCheck">―</b></div>
+          <div>クラウド同期: <b id="connStatus">接続確認中...</b></div>
         </div>
       </div>
       <div class="setting-item">
@@ -304,6 +308,33 @@ input[type=file]{display:none}
   </div>
 </div>
 
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, update, remove, get, child, onDisconnect } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyD01thIqlq4VQpSe8fxU-0a_M9ynO6p0IM",
+    authDomain: "gworker-haichi.firebaseapp.com",
+    databaseURL: "https://gworker-haichi-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "gworker-haichi",
+    storageBucket: "gworker-haichi.firebasestorage.app",
+    messagingSenderId: "218653712277",
+    appId: "1:218653712277:web:af850c4143bbf88983209c"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  window.fb = {
+    db,
+    rRef: (p) => ref(db, p),
+    onValue, set, update, remove, get, child
+  };
+  window.fbReady = true;
+  document.dispatchEvent(new Event("fbReady"));
+  // 接続状態を監視
+  onValue(ref(db, ".info/connected"), (snap) => {
+    window.fbConnected = !!snap.val();
+    document.dispatchEvent(new CustomEvent("fbConnection", { detail: !!snap.val() }));
+  });
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /*!
@@ -717,31 +748,76 @@ function buildColors(){
 }
 function hexToRgba(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
 
-let layout=loadLayout();      // 工程: uid -> "PLACE|SUBSEC" or "WAIT"
-let floorMove=loadFloor();    // フロア異動: uid -> "5F"
+let layout={};                // 工程: uid -> "PLACE|SUBSEC" or "WAIT"
+let floorMove={};             // フロア異動: uid -> "5F"
 let curShift="日勤";
 let curFloor=null;
 let searchQ="";
+let fbInited=false;
 
-// ===== カスタム追加メンバー =====
-function loadCustom(){try{return JSON.parse(localStorage.getItem("haichi3_custom")||"[]")}catch(e){return[]}}
-function saveCustom(arr){localStorage.setItem("haichi3_custom",JSON.stringify(arr))}
-// 起動時にカスタムメンバーをDBにマージ
-(function mergeCustom(){
-  const custom=loadCustom();
-  custom.forEach(c=>{
-    // 重複防止: noで判定
-    if(!DB.people.some(p=>p.no===c.no))DB.people.push(c);
-  });
-})();
-
+// ===== Firebase 同期 =====
 function uid(p){return p.no+"_"+p.name}
-function loadLayout(){try{return JSON.parse(localStorage.getItem("haichi3_layout")||"{}")}catch(e){return{}}}
-function loadFloor(){try{return JSON.parse(localStorage.getItem("haichi3_floor")||"{}")}catch(e){return{}}}
-function saveAll(){localStorage.setItem("haichi3_layout",JSON.stringify(layout));localStorage.setItem("haichi3_floor",JSON.stringify(floorMove))}
-function locOf(p){const k=uid(p);return layout[k]!==undefined?layout[k]:p.section+"|"+p.subsec}
-function floorOf(p){const k=uid(p);return floorMove[k]!==undefined?floorMove[k]:p.floor}
+function uidEnc(u){return u.replace(/[.#$\[\]\/]/g,"_")}  // Firebaseキー禁止文字
+function locOf(p){const k=uidEnc(uid(p));return layout[k]!==undefined?layout[k]:p.section+"|"+p.subsec}
+function floorOf(p){const k=uidEnc(uid(p));return floorMove[k]!==undefined?floorMove[k]:p.floor}
 function sortPeople(a,b){return (ROLE_ORDER[a.role]??9)-(ROLE_ORDER[b.role]??9)||a.no-b.no}
+
+// Firebase書き込み(ローカル即時更新+クラウド送信)
+function setLayout(k,loc){
+  layout[k]=loc;
+  if(window.fb)fb.set(fb.rRef("layout/"+k),loc).catch(e=>console.error("setLayout",e));
+}
+function clearLayout(k){
+  delete layout[k];
+  if(window.fb)fb.remove(fb.rRef("layout/"+k)).catch(e=>console.error("clearLayout",e));
+}
+function setFloorMove(k,fl){
+  floorMove[k]=fl;
+  if(window.fb)fb.set(fb.rRef("floorMove/"+k),fl).catch(e=>console.error("setFloorMove",e));
+}
+function clearFloorMove(k){
+  delete floorMove[k];
+  if(window.fb)fb.remove(fb.rRef("floorMove/"+k)).catch(e=>console.error("clearFloorMove",e));
+}
+function clearAllLayout(){
+  layout={};floorMove={};
+  if(window.fb){fb.remove(fb.rRef("layout"));fb.remove(fb.rRef("floorMove"))}
+}
+
+// カスタム追加メンバー
+function pushCustom(p){if(window.fb)fb.set(fb.rRef("custom/"+p.no),p).catch(e=>console.error("pushCustom",e))}
+function removeCustomFB(no){if(window.fb)fb.remove(fb.rRef("custom/"+no)).catch(e=>console.error("removeCustom",e))}
+
+// Firebase初期化(SDK読込完了後に呼ばれる)
+function initFirebase(){
+  if(fbInited||!window.fb)return;
+  fbInited=true;
+  // layout変化を購読
+  fb.onValue(fb.rRef("layout"),snap=>{layout=snap.val()||{};render()});
+  fb.onValue(fb.rRef("floorMove"),snap=>{floorMove=snap.val()||{};render()});
+  fb.onValue(fb.rRef("custom"),snap=>{
+    const obj=snap.val()||{};
+    // 既存カスタムを除去して入れ直す
+    DB.people=DB.people.filter(p=>!p.custom);
+    Object.values(obj).forEach(c=>{if(!DB.people.some(p=>p.no===c.no))DB.people.push(c)});
+    render();
+    if(document.getElementById("addModal").classList.contains("open"))renderCustomList();
+  });
+  // 接続状態UI更新
+  document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
+  if(window.fbConnected!==undefined)updateConnIndicator(window.fbConnected);
+}
+function updateConnIndicator(connected){
+  const el=document.getElementById("connIndicator");
+  if(!el)return;
+  el.textContent=connected?"● 同期中":"● オフライン";
+  el.className="conn-ind "+(connected?"on":"off");
+  const ds=document.getElementById("connStatus");
+  if(ds)ds.textContent=connected?"接続中":"オフライン";
+}
+
+if(window.fbReady)initFirebase();
+else document.addEventListener("fbReady",initFirebase);
 
 function activeFloors(){
   const v=DB.people.filter(p=>p.shift===curShift);
@@ -818,7 +894,7 @@ function render(){
       sec.addEventListener("dragover",e=>{e.preventDefault();sec.classList.add("dragover")});
       sec.addEventListener("dragleave",()=>sec.classList.remove("dragover"));
       sec.addEventListener("drop",e=>{e.preventDefault();sec.classList.remove("dragover");
-        const k=e.dataTransfer.getData("text/plain");layout[k]=loc;saveAll();render()});
+        const k=e.dataTransfer.getData("text/plain");setLayout(k,loc);render()});
       body.appendChild(sec);
     });
     place.appendChild(body);places.appendChild(place);
@@ -835,11 +911,11 @@ function card(p){
     <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
     <span class="badge ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
     <select class="fsel" title="フロア異動">${opts}</select></div>`;
-  c.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",uid(p));c.classList.add("dragging")});
+  c.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",uidEnc(uid(p)));c.classList.add("dragging")});
   c.addEventListener("dragend",()=>c.classList.remove("dragging"));
   const sel=c.querySelector(".fsel");
   sel.addEventListener("mousedown",e=>e.stopPropagation());
-  sel.addEventListener("change",e=>{floorMove[uid(p)]=e.target.value;saveAll();render()});
+  sel.addEventListener("change",e=>{setFloorMove(uidEnc(uid(p)),e.target.value);render()});
   return c;
 }
 function renderHitbar(){
@@ -889,7 +965,7 @@ function renderLegend(){
   const f=document.createElement("span");f.innerHTML='<span class="badge fork">F</span>フォーク有資格';L.appendChild(f);
 }
 function setShift(s,el){curShift=s;document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));el.classList.add("active");curFloor=null;render()}
-function resetLayout(){if(confirm("配置とフロア異動を名簿の初期状態に戻しますか?")){layout={};floorMove={};saveAll();render()}}
+function resetLayout(){if(confirm("配置とフロア異動を名簿の初期状態に戻しますか?(全端末に反映されます)")){clearAllLayout();render()}}
 
 function openSummary(){
   const v=DB.people.filter(p=>p.shift===curShift);
@@ -991,30 +1067,29 @@ function submitAdd(){
   const sub=place==="WAIT"?"":document.getElementById("addSec").value;
   const lh=parseFloat(document.getElementById("addLH").value)||0;
   const fork=document.getElementById("addFork").checked;
-  // 重複チェック(同名同フロア)
+  // 重複チェック(同名)
   if(DB.people.some(p=>p.name===name)){
     if(!confirm(`「${name}」さんは既に名簿に存在します。それでも追加しますか?`))return;
   }
-  // 新規no = 既存最大+1（カスタム含む）
+  // 新規no = 既存最大+1
   const maxNo=DB.people.reduce((m,p)=>Math.max(m,p.no),0);
   const newP={no:maxNo+1,role,section:place==="WAIT"?"OUT":place,subsec:sub,floor,name,fork,shift,startT:"",endT:"",lh,batch:"",custom:true};
   DB.people.push(newP);
   // WAIT配置の場合はlayoutで強制的にWAITに
-  if(place==="WAIT"){layout[uid(newP)]="WAIT";saveAll()}
-  // カスタム配列に保存
-  const custom=loadCustom();custom.push(newP);saveCustom(custom);
+  if(place==="WAIT")setLayout(uidEnc(uid(newP)),"WAIT");
+  // Firebaseに保存(全端末に伝播)
+  pushCustom(newP);
   // 表示更新
   document.getElementById("addName").value="";
   document.getElementById("addFork").checked=false;
   document.getElementById("addLH").value=8;
   renderCustomList();
   render();
-  // 追加先のフロアに切り替え
   if(floor!==curFloor && shift===curShift){curFloor=floor;render()}
   document.getElementById("addName").focus();
 }
 function renderCustomList(){
-  const custom=loadCustom();
+  const custom=DB.people.filter(p=>p.custom);
   const wrap=document.getElementById("customListWrap");
   if(custom.length===0){wrap.innerHTML='<h4>これまでに追加した人</h4><div class="custom-empty">まだ追加されたメンバーはいません</div>';return}
   let html='<h4>これまでに追加した人 ('+custom.length+'名)</h4>';
@@ -1027,13 +1102,14 @@ function renderCustomList(){
 function deleteCustom(no){
   const target=DB.people.find(p=>p.no===no);
   if(!target)return;
-  if(!confirm(`「${target.name}」さんを名簿から削除しますか?`))return;
-  // DB.peopleから除去
+  if(!confirm(`「${target.name}」さんを名簿から削除しますか?(全端末に反映されます)`))return;
+  const k=uidEnc(uid(target));
+  // Firebaseから削除(リスナーが他端末も同期)
+  removeCustomFB(no);
+  clearLayout(k);
+  clearFloorMove(k);
+  // 即時反映
   DB.people=DB.people.filter(p=>p.no!==no);
-  // localStorageから除去
-  saveCustom(loadCustom().filter(c=>c.no!==no));
-  // layout/floorMoveも掃除
-  const k=uid(target);delete layout[k];delete floorMove[k];saveAll();
   renderCustomList();render();
 }
 
@@ -1053,8 +1129,13 @@ function updateApp(){
   location.replace(url);
 }
 function wipeAll(){
-  if(!confirm("このブラウザに保存された配置データ・追加メンバーをすべて削除します。よろしいですか?"))return;
-  ["haichi3_layout","haichi3_floor","haichi3_lastCheck","haichi3_custom"].forEach(k=>localStorage.removeItem(k));
+  if(!confirm("クラウドに保存された配置データ・追加メンバーをすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
+  if(window.fb){
+    fb.remove(fb.rRef("layout"));
+    fb.remove(fb.rRef("floorMove"));
+    fb.remove(fb.rRef("custom"));
+  }
+  localStorage.removeItem("haichi3_lastCheck");
   layout={};floorMove={};
   alert("削除しました。ページを再読み込みします。");
   location.reload();
@@ -1167,8 +1248,13 @@ function loadFile(ev){
         name:norm(r0[5]),fork:String(r0[6]||"").includes("◯"),shift:norm(r0[7]),
         startT:norm(r0[8]),endT:norm(r0[9]),lh:lhNum,batch:norm(r0[11])});
     }
-    if(people.length){DB={people,master,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
-      layout={};floorMove={};saveAll();curFloor=null;render();alert(people.length+"名を読み込みました")}
+    if(people.length){
+      if(!confirm("名簿を差し替えます。クラウド上の配置・追加メンバーもリセットされます(全端末に反映)。続行しますか?")){return}
+      DB={people,master,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
+      clearAllLayout();
+      if(window.fb)fb.remove(fb.rRef("custom"));
+      curFloor=null;render();alert(people.length+"名を読み込みました");
+    }
     else alert("名簿シートを認識できませんでした");
   };
   r.readAsArrayBuffer(f);
