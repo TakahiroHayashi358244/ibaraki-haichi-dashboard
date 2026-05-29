@@ -115,6 +115,13 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .modal-bg.open{display:flex}
 .modal{background:var(--panel);border-radius:16px;max-width:1180px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--line)}
+.modal-head-actions{display:flex;align-items:center;gap:8px}
+.refresh-btn{position:relative;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;font-size:12px}
+.refresh-btn .rf-icon{font-size:14px;font-weight:900}
+.refresh-btn .rf-dot{display:none;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-left:4px;animation:rfPulse 1.5s ease-in-out infinite}
+.refresh-btn.has-update{border-color:var(--accent);color:var(--accent);background:#fff7ec}
+.refresh-btn.has-update .rf-dot{display:inline-block}
+@keyframes rfPulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.3);opacity:.6}}
 .modal-head h2{font-size:17px;font-weight:800}
 .modal-x{border:none;background:var(--panel2);width:32px;height:32px;border-radius:8px;font-size:20px;cursor:pointer;color:var(--sub);line-height:1}
 .modal-x:hover{background:#fee2e2;color:#dc2626}
@@ -208,7 +215,10 @@ input[type=file]{display:none}
   <div class="modal">
     <div class="modal-head">
       <h2 id="summaryTitle">配置サマリ</h2>
-      <button class="modal-x" onclick="closeSummary()">×</button>
+      <div class="modal-head-actions">
+        <button class="btn refresh-btn" id="sumRefresh" onclick="openSummary()" title="サマリを最新に更新"><span class="rf-icon">↻</span> 更新<span class="rf-dot" id="rfDot"></span></button>
+        <button class="modal-x" onclick="closeSummary()">×</button>
+      </div>
     </div>
     <div class="modal-body" id="summaryBody"></div>
   </div>
@@ -809,19 +819,26 @@ function initFirebase(){
   if(fbInited||!window.fb)return;
   fbInited=true;
   // layout変化を購読
-  fb.onValue(fb.rRef("layout"),snap=>{layout=snap.val()||{};render()});
-  fb.onValue(fb.rRef("floorMove"),snap=>{floorMove=snap.val()||{};render()});
+  fb.onValue(fb.rRef("layout"),snap=>{layout=snap.val()||{};render();markSummaryStale()});
+  fb.onValue(fb.rRef("floorMove"),snap=>{floorMove=snap.val()||{};render();markSummaryStale()});
   fb.onValue(fb.rRef("custom"),snap=>{
     const obj=snap.val()||{};
-    // 既存カスタムを除去して入れ直す
     DB.people=DB.people.filter(p=>!p.custom);
     Object.values(obj).forEach(c=>{if(!DB.people.some(p=>p.no===c.no))DB.people.push(c)});
     render();
     if(document.getElementById("addModal").classList.contains("open"))renderCustomList();
+    markSummaryStale();
   });
   // 接続状態UI更新
   document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
   if(window.fbConnected!==undefined)updateConnIndicator(window.fbConnected);
+}
+// サマリが開いている時に他端末で変更があったら更新ボタンを強調
+function markSummaryStale(){
+  const modal=document.getElementById("summaryModal");
+  if(!modal||!modal.classList.contains("open"))return;
+  const btn=document.getElementById("sumRefresh");
+  if(btn)btn.classList.add("has-update");
 }
 function updateConnIndicator(connected){
   const el=document.getElementById("connIndicator");
@@ -984,6 +1001,9 @@ function setShift(s,el){curShift=s;document.querySelectorAll(".tab").forEach(t=>
 function resetLayout(){if(confirm("配置とフロア異動を名簿の初期状態に戻しますか?(全端末に反映されます)")){clearAllLayout();render()}}
 
 function openSummary(){
+  // 更新ボタンの通知マークをクリア
+  const rb=document.getElementById("sumRefresh");
+  if(rb)rb.classList.remove("has-update");
   const v=DB.people.filter(p=>p.shift===curShift);
   const fl=DB.floors.filter(f=>v.some(p=>floorOf(p)===f));
   document.getElementById("summaryTitle").textContent=`配置サマリ（${curShift}）`;
