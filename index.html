@@ -70,18 +70,18 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .sec-lbl{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
 .sec-lbl .n{font-weight:800}
 .cards{display:flex;flex-wrap:wrap;gap:7px;min-height:14px}
-.card{position:relative;width:106px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 8px 7px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.card{position:relative;width:116px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 8px 7px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .card:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.12)}
 .card.dragging{opacity:.4;cursor:grabbing}
 .card .role{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
 .card .role.Supervisor{color:#d97706}.card .role.Manager{color:#059669}.card .role.Reader{color:#2563eb}.card .role.Operator{color:#64748b}.card .role.Observer{color:#7c3aed}
 .card .name{font-size:13px;font-weight:700;line-height:1.2;word-break:break-all}
-.card .badges{display:flex;gap:3px;margin-top:5px;flex-wrap:wrap;align-items:center}
-.badge{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:4px}
+.card .badges{display:flex;gap:3px;margin-top:5px;flex-wrap:nowrap;align-items:center;overflow:hidden}
+.badge{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:4px;flex-shrink:0;white-space:nowrap}
 .badge.fork{background:var(--fork);color:#fff}
 .badge.day{background:#dbeafe;color:#1d4ed8}
 .badge.night{background:#1e293b;color:#fff}
-.fsel{font-size:9px;font-weight:700;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--sub);padding:1px 2px;font-family:inherit;cursor:pointer;margin-left:auto}
+.fsel{font-size:9px;font-weight:700;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--sub);padding:1px 0 1px 2px;font-family:inherit;cursor:pointer;margin-left:auto;flex-shrink:0;max-width:42px;min-width:0}
 .card .av{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:var(--accent2);border:2px solid var(--panel)}
 .legend{display:flex;gap:13px;padding:0 20px 22px;font-size:11px;color:var(--sub);flex-wrap:wrap;align-items:center}
 .legend span{display:flex;align-items:center;gap:5px}
