@@ -87,6 +87,10 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .place-head{padding:9px 14px;font-weight:800;font-size:14px;letter-spacing:.05em;display:flex;align-items:center;gap:8px;color:#fff}
 .place-head.OUT{background:var(--out)}.place-head.IN{background:var(--in)}.place-head.ICQA{background:var(--icqa)}.place-head.WAIT{background:var(--wait)}
 .all-floors-mark{font-size:9px;font-weight:700;background:rgba(255,255,255,.3);padding:1px 6px;border-radius:8px;margin-left:6px;letter-spacing:.05em}
+/* 待機/欠勤エリアは枠全体をドロップゾーンに */
+.place.WAIT .place-body{flex:1}
+.place.WAIT .sec{flex:1;min-height:140px;display:flex;flex-direction:column}
+.place.WAIT .sec .cards{flex:1;align-content:flex-start}
 /* PDF出力ボタン以降は右端寄せ */
 .toolbar .btn.primary{margin-left:auto}
 .place-head .pc{margin-left:auto;font-size:11px;font-weight:700;background:rgba(255,255,255,.25);padding:1px 8px;border-radius:10px}
@@ -914,7 +918,7 @@ function render(){
   renderHitbar();
   const places=document.createElement("div");places.className="places";
   PLACES.forEach(pl=>{
-    const place=document.createElement("div");place.className="place";
+    const place=document.createElement("div");place.className="place "+pl;
     const subs=pl==="WAIT"?["待機/欠勤"]:DB.master[pl];
     const pool = pl==="WAIT" ? allWait : visible;
     const pcount = pl==="WAIT" ? allWait.length : visible.filter(p=>locOf(p).split("|")[0]===pl).length;
@@ -933,7 +937,11 @@ function render(){
       sec.addEventListener("dragover",e=>{e.preventDefault();sec.classList.add("dragover")});
       sec.addEventListener("dragleave",()=>sec.classList.remove("dragover"));
       sec.addEventListener("drop",e=>{e.preventDefault();sec.classList.remove("dragover");
-        const k=e.dataTransfer.getData("text/plain");setLayout(k,loc);render()});
+        const k=e.dataTransfer.getData("text/plain");
+        const wasWait=layout[k]==="WAIT";
+        // 待機/欠勤からフロア工程へドロップした場合、表示中フロアに合わせる
+        if(wasWait && loc!=="WAIT")setFloorMove(k,curFloor);
+        setLayout(k,loc);render();});
       body.appendChild(sec);
     });
     place.appendChild(body);places.appendChild(place);
