@@ -86,6 +86,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .place{background:var(--floor-panel,var(--panel));border:1px solid var(--line);border-radius:13px;overflow:hidden;display:flex;flex-direction:column}
 .place-head{padding:9px 14px;font-weight:800;font-size:14px;letter-spacing:.05em;display:flex;align-items:center;gap:8px;color:#fff}
 .place-head.OUT{background:var(--out)}.place-head.IN{background:var(--in)}.place-head.ICQA{background:var(--icqa)}.place-head.WAIT{background:var(--wait)}
+.all-floors-mark{font-size:9px;font-weight:700;background:rgba(255,255,255,.3);padding:1px 6px;border-radius:8px;margin-left:6px;letter-spacing:.05em}
+/* PDF出力ボタン以降は右端寄せ */
+.toolbar .btn.primary{margin-left:auto}
 .place-head .pc{margin-left:auto;font-size:11px;font-weight:700;background:rgba(255,255,255,.25);padding:1px 8px;border-radius:10px}
 .place-body{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
 /* セクション小枠 — 色は JS で動的付与 */
@@ -905,19 +908,22 @@ function render(){
   const fl=activeFloors();
   const root=document.getElementById("scroll");root.innerHTML="";
   const visible=DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor);
+  // 待機/欠勤は階層に関係なく当該シフトの全員から
+  const allWait=DB.people.filter(p=>p.shift===curShift && locOf(p)==="WAIT");
   document.getElementById("floorMeta").textContent=`${curFloor} を表示中 / 全${fl.length}フロア`;
   renderHitbar();
   const places=document.createElement("div");places.className="places";
   PLACES.forEach(pl=>{
     const place=document.createElement("div");place.className="place";
     const subs=pl==="WAIT"?["待機/欠勤"]:DB.master[pl];
-    const pcount=visible.filter(p=>locOf(p).split("|")[0]===pl).length;
-    place.innerHTML=`<div class="place-head ${pl}">${pl==="WAIT"?"待機 / 欠勤":pl}<span class="pc">${pcount}</span></div>`;
+    const pool = pl==="WAIT" ? allWait : visible;
+    const pcount = pl==="WAIT" ? allWait.length : visible.filter(p=>locOf(p).split("|")[0]===pl).length;
+    place.innerHTML=`<div class="place-head ${pl}">${pl==="WAIT"?"待機 / 欠勤 <span class=\"all-floors-mark\">全フロア</span>":pl}<span class="pc">${pcount}</span></div>`;
     const body=document.createElement("div");body.className="place-body";
     subs.forEach(sub=>{
       const loc=pl==="WAIT"?"WAIT":pl+"|"+sub;
       const col=secColor[loc]||"#94a3b8";
-      const mem=visible.filter(p=>locOf(p)===loc).sort(sortPeople);
+      const mem=pool.filter(p=>locOf(p)===loc).sort(sortPeople);
       const sec=document.createElement("div");sec.className="sec";sec.dataset.loc=loc;
       sec.style.borderColor=hexToRgba(col,.5);sec.style.background=hexToRgba(col,.07);
       sec.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${mem.length?`<span class="n">${mem.length}</span>`:'<span class="empty">0</span>'}</div>`;
@@ -982,12 +988,13 @@ function renderHitbar(){
 function renderStats(v){
   const fork=v.filter(p=>p.fork).length;
   const wait=v.filter(p=>locOf(p)==="WAIT").length;
+  const allWait=DB.people.filter(p=>p.shift===curShift && locOf(p)==="WAIT").length;
   const bp=pl=>v.filter(p=>locOf(p).split("|")[0]===pl).length;
   document.getElementById("stats").innerHTML=
     `<span><b>${curShift}・${curFloor}</b> <b>${v.length}</b>名</span>`+
     `<span>稼働 <b>${v.length-wait}</b>名</span>`+
     `<span>OUT <b>${bp('OUT')}</b> / IN <b>${bp('IN')}</b> / ICQA <b>${bp('ICQA')}</b></span>`+
-    `<span>フォーク <b>${fork}</b>名</span><span>待機/欠勤 <b>${wait}</b>名</span>`;
+    `<span>フォーク <b>${fork}</b>名</span><span>待機/欠勤(全体) <b>${allWait}</b>名</span>`;
 }
 function renderLegend(){
   const L=document.getElementById("legend");L.innerHTML="";
