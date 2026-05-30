@@ -107,6 +107,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .place{background:var(--floor-panel,var(--panel));border:1px solid var(--line);border-radius:13px;overflow:hidden;display:flex;flex-direction:column}
 .place-head{padding:9px 14px;font-weight:800;font-size:14px;letter-spacing:.05em;display:flex;align-items:center;gap:8px;color:#fff}
 .place-head.OUT{background:var(--out)}.place-head.IN{background:var(--in)}.place-head.ICQA{background:var(--icqa)}.place-head.WAIT{background:var(--wait)}
+.place-head.WAIT{flex-direction:column;align-items:stretch;gap:5px;padding:8px 12px}
+.place-head.WAIT .ph-row{display:flex;align-items:center;gap:8px}
+.place-head.WAIT .all-floors-mark{align-self:flex-start;margin-left:0}
 .all-floors-mark{font-size:9px;font-weight:700;background:rgba(255,255,255,.3);padding:1px 6px;border-radius:8px;margin-left:6px;letter-spacing:.05em}
 /* 待機/欠勤エリアは枠全体をドロップゾーンに */
 .place.WAIT .place-body{flex:1}
@@ -537,9 +540,8 @@ if(window.fbReady)initFirebase();
 else document.addEventListener("fbReady",initFirebase);
 
 function activeFloors(){
-  const v=DB.people.filter(p=>p.shift===curShift);
-  const set=DB.floors.filter(fl=>v.some(p=>floorOf(p)===fl));
-  return set.length?set:[DB.floors[0]];
+  // 全フロアを常時表示(メンバーがいないフロアも選択可能)
+  return DB.floors&&DB.floors.length?DB.floors.slice():["6F","5F","4F","3F","2F"];
 }
 function renderFloorTabs(){
   const fl=activeFloors();
@@ -842,7 +844,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.3";
+const APP_VERSION="2026.05.30.5";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
