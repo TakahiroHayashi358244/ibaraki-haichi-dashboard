@@ -53,6 +53,25 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .custom-row .cdel{border:none;background:#fee2e2;color:#dc2626;padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer}
 .custom-row .cdel:hover{background:#dc2626;color:#fff}
 .custom-empty{font-size:12px;color:var(--sub);font-style:italic;text-align:center;padding:8px}
+.sec-edit-tabs{display:flex;gap:6px;margin:8px 0 10px}
+.sec-tab{padding:6px 14px;font-size:12px;font-weight:800;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer;color:var(--sub);transition:.15s}
+.sec-tab.active.OUT{background:var(--out);color:#fff;border-color:var(--out)}
+.sec-tab.active.IN{background:var(--in);color:#fff;border-color:var(--in)}
+.sec-tab.active.ICQA{background:var(--icqa);color:#fff;border-color:var(--icqa)}
+.sec-edit-list{max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:6px;background:var(--panel2);margin-bottom:10px}
+.sec-edit-row{display:flex;align-items:center;gap:6px;padding:6px 9px;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin-bottom:4px;font-size:13px}
+.sec-edit-row:last-child{margin-bottom:0}
+.sec-edit-row .sec-name{flex:1;font-weight:700;color:var(--txt)}
+.sec-edit-row .sec-cnt{font-size:11px;color:var(--sub);font-weight:600}
+.sec-edit-row button{padding:4px 9px;border:1px solid var(--line);border-radius:5px;background:var(--panel2);color:var(--txt);font-size:11px;font-weight:700;cursor:pointer}
+.sec-edit-row button:hover:not(:disabled){background:var(--accent);color:#fff;border-color:var(--accent)}
+.sec-edit-row button:disabled{opacity:.3;cursor:not-allowed}
+.sec-edit-row button.del{background:#fee2e2;color:#dc2626;border-color:#fecaca}
+.sec-edit-row button.del:hover{background:#dc2626;color:#fff}
+.sec-add-form{display:flex;gap:6px}
+.sec-add-form input{flex:1;padding:7px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:13px;font-family:inherit}
+.sec-add-form input:focus{outline:none;border-color:var(--accent)}
+.sec-add-form .btn{padding:7px 14px;font-size:12px}
 .setting-item{padding:14px 0;border-bottom:1px solid var(--line)}
 .setting-item:last-child{border-bottom:none}
 .setting-item.danger .setting-lbl{color:#dc2626}
@@ -184,7 +203,7 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
   @page{size:A4 landscape;margin:5mm}
   header,.stats,#hitbarWrap,.scroll,.legend,footer,.modal-bg{display:none !important}
   html,body{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  #printArea{display:block !important}
+  #printArea{display:block !important;zoom:0.9}
   .print-floor{page-break-after:always;break-after:page}
   .print-floor:last-child{page-break-after:auto;break-after:auto}
   .print-place,.print-sec,.print-card{break-inside:avoid;page-break-inside:avoid}
@@ -316,6 +335,20 @@ input[type=file]{display:none}
         </div>
       </div>
       <div class="setting-item">
+        <div class="setting-lbl">セクション編集</div>
+        <div class="setting-desc">名簿マスタとは別に、手動でセクションを追加・並び替え・削除できます。配置ファイルにマスタにないセクションがある場合、該当メンバーは待機/欠勤枠に表示されます。変更は全端末に即時反映されます。</div>
+        <div class="sec-edit-tabs">
+          <button class="sec-tab active OUT" onclick="selectSecTab('OUT')">OUT</button>
+          <button class="sec-tab IN" onclick="selectSecTab('IN')">IN</button>
+          <button class="sec-tab ICQA" onclick="selectSecTab('ICQA')">ICQA</button>
+        </div>
+        <div id="secEditList" class="sec-edit-list"></div>
+        <div class="sec-add-form">
+          <input type="text" id="secAddInput" placeholder="新しいセクション名" maxlength="20" onkeydown="if(event.key==='Enter')addSection()">
+          <button class="btn add" onclick="addSection()">+ 追加</button>
+        </div>
+      </div>
+      <div class="setting-item">
         <div class="setting-lbl">配置データの初期化</div>
         <div class="setting-desc">ドラッグで動かした配置・フロア異動を、名簿の初期状態にすべて戻します(配置リセットと同等)。</div>
         <button class="btn" onclick="resetLayout()">配置をリセット</button>
@@ -398,7 +431,18 @@ let fbInited=false;
 // ===== Firebase 同期 =====
 function uid(p){return p.no+"_"+p.name}
 function uidEnc(u){return u.replace(/[.#$\[\]\/]/g,"_")}  // Firebaseキー禁止文字
-function locOf(p){const k=uidEnc(uid(p));return layout[k]!==undefined?layout[k]:p.section+"|"+p.subsec}
+function locOf(p){
+  const k=uidEnc(uid(p));
+  if(layout[k]!==undefined){
+    if(layout[k]==="WAIT")return "WAIT";
+    const parts=layout[k].split("|");
+    if(DB.master[parts[0]]&&DB.master[parts[0]].includes(parts[1]))return layout[k];
+    return "WAIT";  // マスタから消失したセクション → 待機
+  }
+  // 元の section/subsec がマスタにあるか
+  if(!DB.master[p.section]||!DB.master[p.section].includes(p.subsec))return "WAIT";
+  return p.section+"|"+p.subsec;
+}
 function floorOf(p){const k=uidEnc(uid(p));return floorMove[k]!==undefined?floorMove[k]:p.floor}
 function sortPeople(a,b){return (ROLE_ORDER[a.role]??9)-(ROLE_ORDER[b.role]??9)||a.no-b.no}
 
@@ -443,9 +487,27 @@ function initFirebase(){
     if(document.getElementById("addModal").classList.contains("open"))renderCustomList();
     markSummaryStale();
   });
+  // セクションマスタの同期
+  fb.onValue(fb.rRef("master"),snap=>{
+    const m=snap.val();
+    if(m){
+      // Firebaseに保存されているマスタを優先
+      ["OUT","IN","ICQA"].forEach(pl=>{
+        if(Array.isArray(m[pl]))DB.master[pl]=m[pl];
+      });
+      render();
+      if(document.getElementById("settingsModal").classList.contains("open"))renderSecEditList();
+    }else if(window.fb){
+      // 初回はxlsx由来のマスタをFirebaseに書き込む
+      saveMaster();
+    }
+  });
   // 接続状態UI更新
   document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
   if(window.fbConnected!==undefined)updateConnIndicator(window.fbConnected);
+}
+function saveMaster(){
+  if(window.fb)fb.set(fb.rRef("master"),DB.master).catch(e=>console.error("saveMaster",e));
 }
 // サマリが開いている時に他端末で変更があったら更新ボタンを強調
 function markSummaryStale(){
@@ -772,13 +834,81 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.28.1";
+const APP_VERSION="2026.05.30.1";
+let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
   document.getElementById("lastCheck").textContent=localStorage.getItem("haichi3_lastCheck")||"未確認";
+  curSecPlace="OUT";
+  document.querySelectorAll(".sec-tab").forEach(b=>{
+    b.classList.remove("active");
+    if(b.classList.contains("OUT"))b.classList.add("active");
+  });
+  renderSecEditList();
   document.getElementById("settingsModal").classList.add("open");
 }
 function closeSettings(){document.getElementById("settingsModal").classList.remove("open")}
+function selectSecTab(pl){
+  curSecPlace=pl;
+  document.querySelectorAll(".sec-tab").forEach(b=>{
+    b.classList.toggle("active",b.classList.contains(pl));
+  });
+  renderSecEditList();
+}
+function renderSecEditList(){
+  const list=DB.master[curSecPlace]||[];
+  // 現シフトの各セクション在籍数
+  const cnt={};
+  list.forEach(s=>cnt[s]=DB.people.filter(p=>p.shift===curShift && locOf(p)===curSecPlace+"|"+s).length);
+  const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  let html="";
+  list.forEach((s,i)=>{
+    html+=`<div class="sec-edit-row">
+      <span class="sec-name">${esc(s)}</span>
+      <span class="sec-cnt">${cnt[s]||0}名</span>
+      <button onclick="moveSec(${i},-1)" ${i===0?'disabled':''} title="上へ">↑</button>
+      <button onclick="moveSec(${i},1)" ${i===list.length-1?'disabled':''} title="下へ">↓</button>
+      <button onclick="delSec(${i})" class="del" title="削除">削除</button>
+    </div>`;
+  });
+  document.getElementById("secEditList").innerHTML=html||'<div class="custom-empty">セクションがありません</div>';
+}
+function moveSec(i,dir){
+  const list=DB.master[curSecPlace];
+  if(!list)return;
+  const j=i+dir;
+  if(j<0||j>=list.length)return;
+  [list[i],list[j]]=[list[j],list[i]];
+  saveMaster();
+  renderSecEditList();
+  render();
+}
+function delSec(i){
+  const list=DB.master[curSecPlace];
+  if(!list)return;
+  const name=list[i];
+  const cnt=DB.people.filter(p=>p.shift===curShift && locOf(p)===curSecPlace+"|"+name).length;
+  const msg=cnt>0
+    ?`セクション「${name}」を削除しますか?\n現在${cnt}名が配置されており、削除後は待機/欠勤枠に表示されます。`
+    :`セクション「${name}」を削除しますか?`;
+  if(!confirm(msg))return;
+  list.splice(i,1);
+  saveMaster();
+  renderSecEditList();
+  render();
+}
+function addSection(){
+  const input=document.getElementById("secAddInput");
+  const name=input.value.trim();
+  if(!name)return;
+  if(!DB.master[curSecPlace])DB.master[curSecPlace]=[];
+  if(DB.master[curSecPlace].includes(name)){alert("既に存在するセクション名です");return}
+  DB.master[curSecPlace].push(name);
+  saveMaster();
+  input.value="";
+  renderSecEditList();
+  render();
+}
 function updateApp(){
   if(!confirm("最新版をサーバーから取得して再読み込みします。配置データはそのまま保持されます。よろしいですか?"))return;
   localStorage.setItem("haichi3_lastCheck",new Date().toLocaleString("ja-JP"));
@@ -878,10 +1008,11 @@ function loadFile(ev){
         startT:norm(r0[8]),endT:norm(r0[9]),lh:lhNum,batch:norm(r0[11])});
     }
     if(people.length){
-      if(!confirm("名簿を差し替えます。クラウド上の配置・追加メンバーもリセットされます(全端末に反映)。続行しますか?")){return}
+      if(!confirm("名簿を差し替えます。クラウド上の配置・追加メンバー・セクションマスタもリセットされます(全端末に反映)。続行しますか?")){return}
       DB={people,master,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
       clearAllLayout();
       if(window.fb)fb.remove(fb.rRef("custom"));
+      saveMaster();  // 新しいマスタを全端末に同期
       curFloor=null;render();alert(people.length+"名を読み込みました");
     }
     else alert("名簿シートを認識できませんでした");
