@@ -599,7 +599,7 @@ function render(){
     const subs=pl==="WAIT"?["待機/欠勤"]:DB.master[pl];
     const pool = pl==="WAIT" ? allWait : visible;
     const pcount = pl==="WAIT" ? allWait.length : visible.filter(p=>locOf(p).split("|")[0]===pl).length;
-    place.innerHTML=`<div class="place-head ${pl}">${pl==="WAIT"?"待機 / 欠勤 <span class=\"all-floors-mark\">全フロア</span>":pl}<span class="pc">${pcount}</span></div>`;
+    place.innerHTML=`<div class="place-head ${pl}">${pl==="WAIT"?'<div class="ph-row"><span>待機 / 欠勤</span><span class="pc">'+pcount+'</span></div><span class="all-floors-mark">全フロア</span>':pl+'<span class="pc">'+pcount+'</span>'}</div>`;
     const body=document.createElement("div");body.className="place-body";
     subs.forEach(sub=>{
       const loc=pl==="WAIT"?"WAIT":pl+"|"+sub;
