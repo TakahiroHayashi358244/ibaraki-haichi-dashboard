@@ -34,6 +34,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .btn.icon{padding:6px 10px;font-size:15px;line-height:1}
 .btn.add{background:#10b981;color:#fff;border-color:#10b981;font-weight:800}
 .btn.add:hover{background:#059669;color:#fff;border-color:#059669}
+.btn.summary{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800;box-shadow:0 2px 6px rgba(124,58,237,.25)}
+.btn.summary:hover{background:#6d28d9;color:#fff;border-color:#6d28d9}
 .frm{display:flex;flex-direction:column;gap:12px}
 .frm-row{display:flex;flex-direction:column;gap:5px}
 .frm-row.two{flex-direction:row;gap:12px}
@@ -111,7 +113,10 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .place.WAIT .sec{flex:1;min-height:140px;display:flex;flex-direction:column}
 .place.WAIT .sec .cards{flex:1;align-content:flex-start}
 /* PDF出力ボタン以降は右端寄せ */
-.toolbar .btn.primary{margin-left:auto}
+.toolbar .btn.pdf{margin-left:auto}
+.btn.pdf{background:#0ea5e9;color:#fff;border-color:#0ea5e9;font-weight:700}
+.btn.pdf:hover{background:#0284c7;color:#fff;border-color:#0284c7}
+.btn.pdf:disabled{opacity:.6;cursor:wait}
 .place-head .pc{margin-left:auto;font-size:11px;font-weight:700;background:rgba(255,255,255,.25);padding:1px 8px;border-radius:10px}
 .place-body{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
 /* セクション小枠 — 色は JS で動的付与 */
@@ -216,6 +221,7 @@ input[type=file]{display:none}
 <header>
   <div class="title"><h1>配置ダッシュボード</h1><span class="meta" id="floorMeta"></span><span class="conn-ind off" id="connIndicator" title="クラウド同期状態">● 接続確認中</span></div>
   <div class="toolbar">
+    <button class="btn summary" onclick="openSummary()">サマリ</button>
     <div class="search-wrap">
       <input class="search" id="search" placeholder="氏名で検索...">
       <button class="search-clear" id="searchClear" onclick="clearSearch()" title="検索終了">×</button>
@@ -229,7 +235,7 @@ input[type=file]{display:none}
     <input type="file" id="file" accept=".xlsx" onchange="loadFile(event)">
     <button class="btn add" onclick="openAdd()">+ 追加</button>
     <button class="btn" onclick="resetLayout()">配置リセット</button>
-    <button class="btn" onclick="openSummary()">サマリ</button>
+    <button class="btn pdf" onclick="exportPDF()">PDF出力</button>
     <button class="btn primary" onclick="printAll()">印刷</button>
     <button class="btn icon" onclick="openSettings()" title="設定">⚙</button>
   </div>
@@ -406,6 +412,8 @@ input[type=file]{display:none}
   });
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </script>
 <script>
 let DB={"people": [{"no": 1, "role": "Supervisor", "section": "OUT", "subsec": "Pack", "floor": "4F", "name": "石田 貴弘", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 2, "role": "Supervisor", "section": "IN", "subsec": "ChechIn", "floor": "4F", "name": "小池 憲吾", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 3, "role": "Manager", "section": "IN", "subsec": "ChechIn", "floor": "3F", "name": "小林 克敏", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12960264"}, {"no": 4, "role": "Manager", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "本多 竜也", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "14958298"}, {"no": 5, "role": "Manager", "section": "OUT", "subsec": "Read", "floor": "4F", "name": "村重 健人", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "14542019"}, {"no": 6, "role": "Manager", "section": "IN", "subsec": "DockLift", "floor": "4F", "name": "永田 大策", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 7, "role": "Manager", "section": "ICQA", "subsec": "CycleCount", "floor": "6F", "name": "成田 聡明", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "11255317"}, {"no": 8, "role": "Manager", "section": "OUT", "subsec": "OutQA", "floor": "5F", "name": "秋野 誓也", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "14047363"}, {"no": 9, "role": "Manager", "section": "OUT", "subsec": "Pack", "floor": "4F", "name": "森田 拓巳", "fork": false, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "14117185"}, {"no": 10, "role": "Manager", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "秋田 翼", "fork": true, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 11, "role": "Reader", "section": "OUT", "subsec": "Pack", "floor": "2F", "name": "堀 詩織", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 12, "role": "Reader", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "諏訪琴音", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 13, "role": "Reader", "section": "ICQA", "subsec": "CycleCount", "floor": "4F", "name": "利光 康輔", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 14, "role": "Gworker", "section": "OUT", "subsec": "Pack", "floor": "4F", "name": "南口 優夏", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 15, "role": "Gworker", "section": "IN", "subsec": "Stow", "floor": "4F", "name": "森下 里佳", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 16, "role": "Gworker", "section": "IN", "subsec": "Move", "floor": "4F", "name": "服部 宏美", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 17, "role": "Gworker", "section": "IN", "subsec": "Stow", "floor": "4F", "name": "服部 夏美", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 18, "role": "Gworker", "section": "OUT", "subsec": "OutQA", "floor": "4F", "name": "萩原 拓仁", "fork": false, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 19, "role": "Gworker", "section": "IN", "subsec": "ChechIn", "floor": "4F", "name": "大平 香", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 20, "role": "Gworker", "section": "IN", "subsec": "Stow", "floor": "4F", "name": "後藤 友哉", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 21, "role": "Gworker", "section": "IN", "subsec": "Rap", "floor": "4F", "name": "荒木 美佳", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 22, "role": "Gworker", "section": "IN", "subsec": "Rap", "floor": "4F", "name": "福元 陽花", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 23, "role": "Gworker", "section": "IN", "subsec": "ChechIn", "floor": "4F", "name": "村田 直人", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 24, "role": "Gworker", "section": "OUT", "subsec": "ODM", "floor": "4F", "name": "池田 裕次", "fork": true, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 25, "role": "Gworker", "section": "IN", "subsec": "EachRecive", "floor": "4F", "name": "夏目 祥文", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 26, "role": "Gworker", "section": "IN", "subsec": "ChechIn", "floor": "4F", "name": "向井 隆洋", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 27, "role": "Gworker", "section": "OUT", "subsec": "Read", "floor": "4F", "name": "廣瀬 晃", "fork": true, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 28, "role": "Gworker", "section": "IN", "subsec": "QA", "floor": "4F", "name": "稲冨 未来", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 29, "role": "Gworker", "section": "IN", "subsec": "DockLift", "floor": "4F", "name": "市川 江里香", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 30, "role": "Gworker", "section": "OUT", "subsec": "Pack", "floor": "4F", "name": "濱口 剛一", "fork": false, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 31, "role": "Gworker", "section": "OUT", "subsec": "Read", "floor": "4F", "name": "大堂 啓示", "fork": true, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 32, "role": "Gworker", "section": "IN", "subsec": "EachRecive", "floor": "4F", "name": "大八木 一典", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 33, "role": "Gworker", "section": "IN", "subsec": "Sweep", "floor": "4F", "name": "渡邉 輝男", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 34, "role": "Gworker", "section": "IN", "subsec": "QA", "floor": "4F", "name": "小野寺 祥子", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 35, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "山根\t建志", "fork": true, "shift": "夜勤", "startT": "20:00:00", "endT": "05:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 36, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "檀浦 景子", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 37, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "上吹越 宏樹", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 38, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "伊東 毅", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 39, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "内山 優雅", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 40, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "石原 沙耶香", "fork": false, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "12345678"}, {"no": 41, "role": "Gworker", "section": "OUT", "subsec": "Pick", "floor": "4F", "name": "林 貴裕", "fork": true, "shift": "日勤", "startT": "09:00:00", "endT": "18:00:00", "lh": 8.0, "batch": "13340161"}], "master": {"OUT": ["Pick", "Pack", "Ship", "Read", "OutQA", "Sweeper", "ODM"], "IN": ["Dock", "QA", "ChechIn", "EachRecive", "Rap", "Sweep", "DockLift", "Stow", "Move", "Contena"], "ICQA": ["ICQA", "CycleCount"]}, "floors": ["6F", "5F", "4F", "3F", "2F"]};
@@ -834,7 +842,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.1";
+const APP_VERSION="2026.05.30.3";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -929,11 +937,10 @@ function wipeAll(){
   location.reload();
 }
 
-function printAll(){
+function buildPrintHTML(){
   const v=DB.people.filter(p=>p.shift===curShift);
   const fl=DB.floors.filter(f=>v.some(p=>floorOf(p)===f));
-  const area=document.getElementById("printArea");
-  if(fl.length===0){alert(curShift+"の出勤予定者がいません");return}
+  if(fl.length===0)return null;
   const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
   let html="";
   fl.forEach(f=>{
@@ -965,8 +972,52 @@ function printAll(){
     if(w.length){html+=`<div style="margin-top:6px;font-size:10px;color:#666">待機/欠勤(${w.length}名): ${w.map(p=>esc(p.name)).join("、")}</div>`}
     html+=`</div>`; // /print-floor
   });
-  area.innerHTML=html;
+  return html;
+}
+function printAll(){
+  const html=buildPrintHTML();
+  if(html===null){alert(curShift+"の出勤予定者がいません");return}
+  document.getElementById("printArea").innerHTML=html;
   window.print();
+}
+async function exportPDF(){
+  if(!window.html2canvas||!window.jspdf){alert("PDFライブラリの読み込みに失敗しました。ネット接続を確認してページを再読込してください。");return}
+  const html=buildPrintHTML();
+  if(html===null){alert(curShift+"の出勤予定者がいません");return}
+  const area=document.getElementById("printArea");
+  area.innerHTML=html;
+  const btn=document.querySelector(".btn.pdf");
+  const orig=btn?btn.textContent:"";
+  if(btn){btn.textContent="PDF生成中...";btn.disabled=true}
+  try{
+    // 画面外に固定幅(A4横相当)でレンダリング
+    area.style.cssText="display:block;position:fixed;left:-99999px;top:0;width:1123px;background:#fff;padding:10px;box-sizing:border-box";
+    const floors=area.querySelectorAll(".print-floor");
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+    const pw=pdf.internal.pageSize.getWidth();   // 297
+    const ph=pdf.internal.pageSize.getHeight();  // 210
+    const margin=5;
+    for(let i=0;i<floors.length;i++){
+      const canvas=await html2canvas(floors[i],{scale:2,backgroundColor:"#ffffff",useCORS:true,logging:false});
+      const imgW=pw-margin*2;
+      let imgH=canvas.height*imgW/canvas.width;
+      const maxH=ph-margin*2;
+      let w=imgW,hh=imgH;
+      if(imgH>maxH){hh=maxH;w=canvas.width*maxH/canvas.height} // 高さ超過時は高さ基準で縮小
+      const x=(pw-w)/2, y=margin;
+      if(i>0)pdf.addPage();
+      pdf.addImage(canvas.toDataURL("image/png"),"PNG",x,y,w,hh);
+    }
+    const fname=`配置図_${curShift}_${new Date().toLocaleDateString("ja-JP").replace(/\//g,"-")}.pdf`;
+    pdf.save(fname);
+  }catch(err){
+    console.error(err);
+    alert("PDF生成に失敗しました: "+err.message);
+  }finally{
+    area.style.cssText="";area.innerHTML="";
+    if(btn){btn.textContent=orig;btn.disabled=false}
+  }
 }
 
 // 印刷後に印刷用エリアをクリア
