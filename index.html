@@ -582,16 +582,35 @@ function floorHue(fl){
   return (idx*67)%360;
 }
 // バッチID(所属)ごとに固定色を割り当て — ハッシュベースで同じIDは常に同じ色
-// 職責(B列)ごとの色 ── カード左ボーダー、アバター、役職テキストで統一使用
-const ROLE_COLORS={
-  Manager:    "#059669",  // 緑(エメラルド)
-  Supervisor: "#d97706",  // アンバー
-  Reader:     "#2563eb",  // 青
-  Operator:   "#64748b",  // グレー
-  Observer:   "#7c3aed",  // 紫
-  Gworker:    "#0891b2",  // シアン
+// 職責(B列)ごとのスタイル ── 背景色 + 文字色のペアで定義
+// 未知の職責が現れたら自動的に色を割り当てる(ROLE_AUTO_COLORS から)
+const ROLE_STYLES={
+  Manager:    {bg:"#059669",fg:"#fff"},       // 緑(エメラルド)
+  Supervisor: {bg:"#d97706",fg:"#fff"},       // アンバー
+  Reader:     {bg:"#2563eb",fg:"#fff"},       // 青
+  Operator:   {bg:"#64748b",fg:"#fff"},       // グレー
+  Observer:   {bg:"#7c3aed",fg:"#fff"},       // 紫
+  Gworker:    {bg:"#000000",fg:"#facc15"},    // 黒×黄
 };
-function roleColor(r){return ROLE_COLORS[r]||"#94a3b8"}
+// 未知の職責に自動割り当てる色プール(既存色と被らないよう選定)
+const ROLE_AUTO_COLORS=["#0891b2","#db2777","#16a34a","#ea580c","#9333ea","#dc2626","#0d9488","#c026d3","#65a30d","#1d4ed8","#b45309","#7e22ce"];
+let _roleAutoVer=-1;
+const _roleAutoMap=new Map();
+function roleStyle(r){
+  if(ROLE_STYLES[r])return ROLE_STYLES[r];
+  if(!r)return {bg:"#94a3b8",fg:"#fff"};
+  // 未知の職責は出現順に色を割り当て(同じ職責は必ず同じ色)
+  if(DB.people.length!==_roleAutoVer){
+    _roleAutoMap.clear();
+    const known=Object.keys(ROLE_STYLES);
+    const unknown=[...new Set(DB.people.map(p=>p.role).filter(x=>x&&!known.includes(x)))].sort();
+    unknown.forEach((rr,i)=>_roleAutoMap.set(rr,{bg:ROLE_AUTO_COLORS[i%ROLE_AUTO_COLORS.length],fg:"#fff"}));
+    _roleAutoVer=DB.people.length;
+  }
+  return _roleAutoMap.get(r)||{bg:"#94a3b8",fg:"#fff"};
+}
+function roleColor(r){return roleStyle(r).bg}    // 既存呼び出しと互換
+function roleFg(r){return roleStyle(r).fg}
 function applyFloorTheme(){
   const h=floorHue(curFloor);
   const root=document.documentElement;
@@ -655,13 +674,13 @@ function render(){
 function card(p){
   const c=document.createElement("div");c.className="card";
   if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
-  // カードの左ボーダーを職責色に
-  const rcol=roleColor(p.role);
+  // カードの左ボーダーとアバターを職責色に
+  const st=roleStyle(p.role);
   c.style.borderLeftWidth="4px";
-  c.style.borderLeftColor=rcol;
+  c.style.borderLeftColor=st.bg;
   c.style.paddingLeft="5px";
   const opts=DB.floors.map(f=>`<option value="${f}"${f===floorOf(p)?" selected":""}>${f}</option>`).join("");
-  c.innerHTML=`<div class="av" style="background:${rcol}">${p.role[0]}</div><div class="role ${p.role}" style="color:${rcol}">${p.role}</div>
+  c.innerHTML=`<div class="av" style="background:${st.bg};color:${st.fg}">${p.role[0]}</div><div class="role ${p.role}" style="color:${st.bg}">${p.role}</div>
     <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
     <span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
     <select class="fsel" title="フロア異動">${opts}</select></div>`;
@@ -776,11 +795,15 @@ function renderStats(v){
 }
 function renderLegend(){
   const L=document.getElementById("legend");L.innerHTML="";
-  // 職責の凡例(現シフトに存在する職責のみ表示)
-  const usedRoles=[...new Set(DB.people.filter(p=>p.shift===curShift).map(p=>p.role))];
-  ["Manager","Supervisor","Reader","Operator","Observer","Gworker"].forEach(r=>{
-    if(!usedRoles.includes(r))return;
-    const sp=document.createElement("span");sp.innerHTML=`<span class="sw" style="background:${roleColor(r)}"></span>${r}`;L.appendChild(sp);
+  // 職責の凡例(現シフトに存在する職責のみ、未知の職責も自動対応)
+  const known=["Manager","Supervisor","Reader","Operator","Observer","Gworker"];
+  const used=[...new Set(DB.people.filter(p=>p.shift===curShift).map(p=>p.role))];
+  // 既知の順 → 未知の職責(出現順)
+  const ordered=[...known.filter(r=>used.includes(r)),...used.filter(r=>!known.includes(r)).sort()];
+  ordered.forEach(r=>{
+    const st=roleStyle(r);
+    const sp=document.createElement("span");
+    sp.innerHTML=`<span class="sw" style="background:${st.bg}"></span>${r}`;L.appendChild(sp);
   });
   // 区切り
   if(L.children.length){const div=document.createElement("span");div.style.cssText="opacity:.3;margin:0 4px";div.textContent="|";L.appendChild(div)}
@@ -834,8 +857,13 @@ function openSummary(){
         const mem=fp.filter(p=>locOf(p)===pl+"|"+s).sort(sortPeople);
         const lhT=lhSum(mem);
         const names=mem.map(p=>{
-          const cls=p.role==='Supervisor'?'sv':p.role==='Manager'?'mg':p.role==='Reader'?'rd':p.role==='Observer'?'ob':p.role==='Gworker'?'gw':'op';
-          return `<span class="nm ${cls}">${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`;
+          const st=roleStyle(p.role);
+          // 明度判定して薄色背景に整える(濃色は文字色をbg、薄色背景は塗りで)
+          const isInverse=st.fg!=="#fff";  // Gworkerなど特殊配色
+          const bg=isInverse?st.bg:hexToRgba(st.bg,.16);
+          const fg=isInverse?st.fg:st.bg;
+          const bd=isInverse?st.bg:hexToRgba(st.bg,.35);
+          return `<span class="nm" style="background:${bg};color:${fg};border-color:${bd}">${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`;
         }).join("");
         rows+=`<tr><td class="secname">${s}</td><td class="${mem.length?'has':'z'}">${mem.length}</td><td class="${mem.length?'lh':'z'}">${mem.length?fmtLH(lhT):0}</td><td class="nmcell">${names||'<span class="z">—</span>'}</td></tr>`;
       });
@@ -943,7 +971,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.9";
+const APP_VERSION="2026.05.30.10";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1073,7 +1101,8 @@ function buildPrintHTML(){
         html+=`<div class="print-sec" style="border-color:${hexToRgba(col,.55)};background:${hexToRgba(col,.06)}">`+
           `<div class="print-sec-lbl" style="color:${col}"><span>${esc(sub)}</span><span>${mem.length}</span></div><div class="print-cards">`;
         mem.forEach(p=>{
-          html+=`<div class="print-card" style="border-left:3px solid ${roleColor(p.role)};padding-left:4px"><div class="pr" style="color:${roleColor(p.role)}">${esc(p.role)}</div><div class="pnm">${esc(p.name)}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
+          const st=roleStyle(p.role);
+          html+=`<div class="print-card" style="border-left:3px solid ${st.bg};padding-left:4px"><div class="pr" style="color:${st.bg}">${esc(p.role)}</div><div class="pnm">${esc(p.name)}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
         });
         html+=`</div></div>`;
       });
