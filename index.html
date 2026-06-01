@@ -128,9 +128,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .sec-lbl{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
 .sec-lbl .n{font-weight:800}
 .cards{display:flex;flex-wrap:wrap;gap:7px;min-height:14px}
-.card{position:relative;width:116px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 8px 7px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.card{position:relative;width:116px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 8px 7px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05);touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
 .card:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.12)}
 .card.dragging{opacity:.4;cursor:grabbing}
+.ghost-card{position:fixed!important;left:0;top:0;pointer-events:none;opacity:.92;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,.35);transform:scale(1.04);transition:none!important;margin:0!important}
+.ghost-card:hover{transform:scale(1.04)!important;box-shadow:0 12px 32px rgba(0,0,0,.35)!important}
+body.dragging-active{cursor:grabbing}
+body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .card .role{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
 .card .role.Supervisor{color:#d97706}.card .role.Manager{color:#059669}.card .role.Reader{color:#2563eb}.card .role.Operator{color:#64748b}.card .role.Observer{color:#7c3aed}
 .card .name{font-size:13px;font-weight:700;line-height:1.2;word-break:break-all}
@@ -613,14 +617,6 @@ function render(){
       const cards=document.createElement("div");cards.className="cards";
       mem.forEach(p=>cards.appendChild(card(p)));
       sec.appendChild(cards);
-      sec.addEventListener("dragover",e=>{e.preventDefault();sec.classList.add("dragover")});
-      sec.addEventListener("dragleave",()=>sec.classList.remove("dragover"));
-      sec.addEventListener("drop",e=>{e.preventDefault();sec.classList.remove("dragover");
-        const k=e.dataTransfer.getData("text/plain");
-        const wasWait=layout[k]==="WAIT";
-        // 待機/欠勤からフロア工程へドロップした場合、表示中フロアに合わせる
-        if(wasWait && loc!=="WAIT")setFloorMove(k,curFloor);
-        setLayout(k,loc);render();});
       body.appendChild(sec);
     });
     place.appendChild(body);places.appendChild(place);
@@ -630,19 +626,82 @@ function render(){
   renderLegend();
 }
 function card(p){
-  const c=document.createElement("div");c.className="card";c.draggable=true;
+  const c=document.createElement("div");c.className="card";
   if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
   const opts=DB.floors.map(f=>`<option value="${f}"${f===floorOf(p)?" selected":""}>${f}</option>`).join("");
   c.innerHTML=`<div class="av">${p.role[0]}</div><div class="role ${p.role}">${p.role}</div>
     <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
     <span class="badge ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
     <select class="fsel" title="フロア異動">${opts}</select></div>`;
-  c.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/plain",uidEnc(uid(p)));c.classList.add("dragging")});
-  c.addEventListener("dragend",()=>c.classList.remove("dragging"));
+  attachCardDrag(c,p);
   const sel=c.querySelector(".fsel");
-  sel.addEventListener("mousedown",e=>e.stopPropagation());
+  // セレクタ操作中はドラッグ開始しない
+  sel.addEventListener("pointerdown",e=>e.stopPropagation());
   sel.addEventListener("change",e=>{setFloorMove(uidEnc(uid(p)),e.target.value);render()});
   return c;
+}
+// 統一ドラッグ実装 — マウス・タッチ・ペンすべてで動作
+function attachCardDrag(c,p){
+  let startX=0,startY=0,active=false,ghost=null,hoverSec=null,pid=null;
+  const TH=6;  // この距離を超えるとドラッグ開始
+  c.addEventListener("pointerdown",e=>{
+    // セレクタ/ボタン上では発火しない
+    if(e.target.closest("select,button,input,.fsel"))return;
+    if(e.button!==undefined && e.button!==0)return;  // 左ボタンのみ
+    pid=e.pointerId;startX=e.clientX;startY=e.clientY;active=false;
+    c.setPointerCapture(pid);
+  });
+  c.addEventListener("pointermove",e=>{
+    if(e.pointerId!==pid)return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    if(!active){
+      if(Math.hypot(dx,dy)<TH)return;
+      active=true;
+      // ゴーストカード作成
+      const r=c.getBoundingClientRect();
+      ghost=c.cloneNode(true);
+      ghost.className="card ghost-card";
+      ghost.style.width=r.width+"px";
+      ghost.style.height=r.height+"px";
+      document.body.appendChild(ghost);
+      c.classList.add("dragging");
+      document.body.classList.add("dragging-active");
+    }
+    // ゴーストを指/カーソルに追従
+    const r=c.getBoundingClientRect();
+    ghost.style.left=(e.clientX-r.width/2)+"px";
+    ghost.style.top=(e.clientY-r.height/2)+"px";
+    // ドロップターゲット検出
+    ghost.style.display="none";
+    const under=document.elementFromPoint(e.clientX,e.clientY);
+    ghost.style.display="";
+    const sec=under?under.closest(".sec"):null;
+    if(sec!==hoverSec){
+      if(hoverSec)hoverSec.classList.remove("dragover");
+      if(sec)sec.classList.add("dragover");
+      hoverSec=sec;
+    }
+  });
+  const finish=ok=>{
+    if(active){
+      if(ok && hoverSec){
+        const loc=hoverSec.dataset.loc;
+        const k=uidEnc(uid(p));
+        const wasWait=layout[k]==="WAIT";
+        if(wasWait && loc!=="WAIT")setFloorMove(k,curFloor);
+        setLayout(k,loc);render();
+      }
+      if(hoverSec)hoverSec.classList.remove("dragover");
+      if(ghost){ghost.remove();ghost=null}
+      c.classList.remove("dragging");
+      document.body.classList.remove("dragging-active");
+    }
+    hoverSec=null;active=false;pid=null;
+  };
+  c.addEventListener("pointerup",e=>{if(e.pointerId===pid)finish(true)});
+  c.addEventListener("pointercancel",e=>{if(e.pointerId===pid)finish(false)});
+  // 念のためHTML5DnDは完全に無効化
+  c.addEventListener("dragstart",e=>e.preventDefault());
 }
 function renderHitbar(){
   const wrap=document.getElementById("hitbarWrap");
@@ -844,7 +903,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.5";
+const APP_VERSION="2026.05.30.6";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
