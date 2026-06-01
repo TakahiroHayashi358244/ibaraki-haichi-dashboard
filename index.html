@@ -143,6 +143,7 @@ body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1p
 .badge.fork{background:var(--fork);color:#fff}
 .badge.day{background:#dbeafe;color:#1d4ed8}
 .badge.night{background:#1e293b;color:#fff}
+.badge.batch{font-family:Consolas,monospace;letter-spacing:.02em;cursor:default}
 .fsel{font-size:9px;font-weight:700;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--sub);padding:1px 0 1px 2px;font-family:inherit;cursor:pointer;margin-left:auto;flex-shrink:0;max-width:42px;min-width:0}
 .card .av{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:var(--accent2);border:2px solid var(--panel)}
 .legend{display:flex;gap:13px;padding:0 20px 22px;font-size:11px;color:var(--sub);flex-wrap:wrap;align-items:center}
@@ -190,6 +191,7 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .nm.mg{background:#d1fae5;color:#065f46;border-color:#a7f3d0}
 .nm.rd{background:#dbeafe;color:#1e3a8a;border-color:#bfdbfe}
 .nm.ob{background:#ede9fe;color:#5b21b6;border-color:#ddd6fe}
+.nm.gw{background:#cffafe;color:#155e75;border-color:#a5f3fc}
 .nm.op{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
 .nm .fk{background:#dc2626;color:#fff;font-size:9px;padding:0 4px;border-radius:3px;margin-left:2px}
 /* ===== 印刷用 ===== */
@@ -211,6 +213,7 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .print-card .pr{font-size:8px;font-weight:800;color:#666;text-transform:uppercase;line-height:1.1}
 .print-card .pnm{font-size:12px;font-weight:700;line-height:1.2}
 .print-card .pf2{display:inline-block;font-size:8px;font-weight:800;background:#dc2626;color:#fff;padding:0 4px;border-radius:3px;margin-top:1px}
+.print-card .pbatch{display:inline-block;font-size:8px;font-weight:800;color:#fff;padding:0 4px;border-radius:3px;margin-top:1px;margin-left:2px}
 @media print{
   @page{size:A4 landscape;margin:5mm}
   header,.stats,#hitbarWrap,.scroll,.legend,footer,.modal-bg{display:none !important}
@@ -438,6 +441,7 @@ function hexToRgba(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255
 
 let layout={};                // 工程: uid -> "PLACE|SUBSEC" or "WAIT"
 let floorMove={};             // フロア異動: uid -> "5F"
+let deletedSections={OUT:[],IN:[],ICQA:[]};  // 設定で削除されたセクションを記録(xlsx再読込でも復活させない)
 let curShift="日勤";
 let curFloor=null;
 let searchQ="";
@@ -517,12 +521,24 @@ function initFirebase(){
       saveMaster();
     }
   });
+  // 削除済みセクションの同期(xlsx再読込で復活させないため)
+  fb.onValue(fb.rRef("deletedSections"),snap=>{
+    const d=snap.val();
+    if(d){
+      ["OUT","IN","ICQA"].forEach(pl=>{
+        deletedSections[pl]=Array.isArray(d[pl])?d[pl]:[];
+      });
+    }
+  });
   // 接続状態UI更新
   document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
   if(window.fbConnected!==undefined)updateConnIndicator(window.fbConnected);
 }
 function saveMaster(){
   if(window.fb)fb.set(fb.rRef("master"),DB.master).catch(e=>console.error("saveMaster",e));
+}
+function saveDeleted(){
+  if(window.fb)fb.set(fb.rRef("deletedSections"),deletedSections).catch(e=>console.error("saveDeleted",e));
 }
 // サマリが開いている時に他端末で変更があったら更新ボタンを強調
 function markSummaryStale(){
@@ -565,6 +581,17 @@ function floorHue(fl){
   const idx=DB.floors.indexOf(fl);
   return (idx*67)%360;
 }
+// バッチID(所属)ごとに固定色を割り当て — ハッシュベースで同じIDは常に同じ色
+// 職責(B列)ごとの色 ── カード左ボーダー、アバター、役職テキストで統一使用
+const ROLE_COLORS={
+  Manager:    "#059669",  // 緑(エメラルド)
+  Supervisor: "#d97706",  // アンバー
+  Reader:     "#2563eb",  // 青
+  Operator:   "#64748b",  // グレー
+  Observer:   "#7c3aed",  // 紫
+  Gworker:    "#0891b2",  // シアン
+};
+function roleColor(r){return ROLE_COLORS[r]||"#94a3b8"}
 function applyFloorTheme(){
   const h=floorHue(curFloor);
   const root=document.documentElement;
@@ -628,10 +655,15 @@ function render(){
 function card(p){
   const c=document.createElement("div");c.className="card";
   if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
+  // カードの左ボーダーを職責色に
+  const rcol=roleColor(p.role);
+  c.style.borderLeftWidth="4px";
+  c.style.borderLeftColor=rcol;
+  c.style.paddingLeft="5px";
   const opts=DB.floors.map(f=>`<option value="${f}"${f===floorOf(p)?" selected":""}>${f}</option>`).join("");
-  c.innerHTML=`<div class="av">${p.role[0]}</div><div class="role ${p.role}">${p.role}</div>
+  c.innerHTML=`<div class="av" style="background:${rcol}">${p.role[0]}</div><div class="role ${p.role}" style="color:${rcol}">${p.role}</div>
     <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
-    <span class="badge ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
+    <span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
     <select class="fsel" title="フロア異動">${opts}</select></div>`;
   attachCardDrag(c,p);
   const sel=c.querySelector(".fsel");
@@ -744,6 +776,14 @@ function renderStats(v){
 }
 function renderLegend(){
   const L=document.getElementById("legend");L.innerHTML="";
+  // 職責の凡例(現シフトに存在する職責のみ表示)
+  const usedRoles=[...new Set(DB.people.filter(p=>p.shift===curShift).map(p=>p.role))];
+  ["Manager","Supervisor","Reader","Operator","Observer","Gworker"].forEach(r=>{
+    if(!usedRoles.includes(r))return;
+    const sp=document.createElement("span");sp.innerHTML=`<span class="sw" style="background:${roleColor(r)}"></span>${r}`;L.appendChild(sp);
+  });
+  // 区切り
+  if(L.children.length){const div=document.createElement("span");div.style.cssText="opacity:.3;margin:0 4px";div.textContent="|";L.appendChild(div)}
   ["OUT","IN","ICQA"].forEach(pl=>{
     DB.master[pl].forEach(s=>{const c=secColor[pl+"|"+s];
       const sp=document.createElement("span");sp.innerHTML=`<span class="sw" style="background:${c}"></span>${s}`;L.appendChild(sp)});
@@ -794,7 +834,7 @@ function openSummary(){
         const mem=fp.filter(p=>locOf(p)===pl+"|"+s).sort(sortPeople);
         const lhT=lhSum(mem);
         const names=mem.map(p=>{
-          const cls=p.role==='Supervisor'?'sv':p.role==='Manager'?'mg':p.role==='Reader'?'rd':p.role==='Observer'?'ob':'op';
+          const cls=p.role==='Supervisor'?'sv':p.role==='Manager'?'mg':p.role==='Reader'?'rd':p.role==='Observer'?'ob':p.role==='Gworker'?'gw':'op';
           return `<span class="nm ${cls}">${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`;
         }).join("");
         rows+=`<tr><td class="secname">${s}</td><td class="${mem.length?'has':'z'}">${mem.length}</td><td class="${mem.length?'lh':'z'}">${mem.length?fmtLH(lhT):0}</td><td class="nmcell">${names||'<span class="z">—</span>'}</td></tr>`;
@@ -903,7 +943,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.6";
+const APP_VERSION="2026.05.30.9";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -958,11 +998,15 @@ function delSec(i){
   const name=list[i];
   const cnt=DB.people.filter(p=>p.shift===curShift && locOf(p)===curSecPlace+"|"+name).length;
   const msg=cnt>0
-    ?`セクション「${name}」を削除しますか?\n現在${cnt}名が配置されており、削除後は待機/欠勤枠に表示されます。`
-    :`セクション「${name}」を削除しますか?`;
+    ?`セクション「${name}」を削除しますか?\n現在${cnt}名が配置されており、削除後は待機/欠勤枠に表示されます。\n(名簿再読込しても復活しません)`
+    :`セクション「${name}」を削除しますか?\n(名簿再読込しても復活しません)`;
   if(!confirm(msg))return;
   list.splice(i,1);
+  // 削除リストに記録 ── xlsx再読込でも復活させない
+  if(!deletedSections[curSecPlace])deletedSections[curSecPlace]=[];
+  if(!deletedSections[curSecPlace].includes(name))deletedSections[curSecPlace].push(name);
   saveMaster();
+  saveDeleted();
   renderSecEditList();
   render();
 }
@@ -973,6 +1017,11 @@ function addSection(){
   if(!DB.master[curSecPlace])DB.master[curSecPlace]=[];
   if(DB.master[curSecPlace].includes(name)){alert("既に存在するセクション名です");return}
   DB.master[curSecPlace].push(name);
+  // 削除リストから外す ── 一度削除したものを再追加した場合
+  if(deletedSections[curSecPlace]){
+    const di=deletedSections[curSecPlace].indexOf(name);
+    if(di>=0){deletedSections[curSecPlace].splice(di,1);saveDeleted()}
+  }
   saveMaster();
   input.value="";
   renderSecEditList();
@@ -986,14 +1035,16 @@ function updateApp(){
   location.replace(url);
 }
 function wipeAll(){
-  if(!confirm("クラウドに保存された配置データ・追加メンバーをすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
+  if(!confirm("クラウドに保存された配置データ・追加メンバー・セクション編集をすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
   if(window.fb){
     fb.remove(fb.rRef("layout"));
     fb.remove(fb.rRef("floorMove"));
     fb.remove(fb.rRef("custom"));
+    fb.remove(fb.rRef("master"));
+    fb.remove(fb.rRef("deletedSections"));
   }
   localStorage.removeItem("haichi3_lastCheck");
-  layout={};floorMove={};
+  layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};
   alert("削除しました。ページを再読み込みします。");
   location.reload();
 }
@@ -1022,7 +1073,7 @@ function buildPrintHTML(){
         html+=`<div class="print-sec" style="border-color:${hexToRgba(col,.55)};background:${hexToRgba(col,.06)}">`+
           `<div class="print-sec-lbl" style="color:${col}"><span>${esc(sub)}</span><span>${mem.length}</span></div><div class="print-cards">`;
         mem.forEach(p=>{
-          html+=`<div class="print-card"><div class="pr">${esc(p.role)}</div><div class="pnm">${esc(p.name)}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
+          html+=`<div class="print-card" style="border-left:3px solid ${roleColor(p.role)};padding-left:4px"><div class="pr" style="color:${roleColor(p.role)}">${esc(p.role)}</div><div class="pnm">${esc(p.name)}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
         });
         html+=`</div></div>`;
       });
@@ -1120,11 +1171,33 @@ function loadFile(ev){
         startT:norm(r0[8]),endT:norm(r0[9]),lh:lhNum,batch:norm(r0[11])});
     }
     if(people.length){
-      if(!confirm("名簿を差し替えます。クラウド上の配置・追加メンバー・セクションマスタもリセットされます(全端末に反映)。続行しますか?")){return}
-      DB={people,master,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
+      if(!confirm("名簿を差し替えます。クラウド上の配置・追加メンバーがリセットされます(セクション編集の追加・削除は保持されます)。続行しますか?")){return}
+      // 既存マスタと xlsx 由来マスタをマージ ── 設定で手動追加したセクションを維持、削除されたセクションは復活させない
+      const hasExisting=DB.master&&Object.values(DB.master).some(a=>Array.isArray(a)&&a.length);
+      let mergedMaster;
+      if(hasExisting){
+        mergedMaster={OUT:[...(DB.master.OUT||[])],IN:[...(DB.master.IN||[])],ICQA:[...(DB.master.ICQA||[])]};
+        ["OUT","IN","ICQA"].forEach(pl=>{
+          master[pl].forEach(s=>{
+            // 削除リストに含まれていれば復活させない
+            if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
+            if(!mergedMaster[pl].includes(s))mergedMaster[pl].push(s);
+          });
+        });
+      }else{
+        // 初回 ── xlsx由来のマスタをそのまま採用(削除リストにあるものは除く)
+        mergedMaster={OUT:[],IN:[],ICQA:[]};
+        ["OUT","IN","ICQA"].forEach(pl=>{
+          master[pl].forEach(s=>{
+            if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
+            mergedMaster[pl].push(s);
+          });
+        });
+      }
+      DB={people,master:mergedMaster,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
       clearAllLayout();
       if(window.fb)fb.remove(fb.rRef("custom"));
-      saveMaster();  // 新しいマスタを全端末に同期
+      saveMaster();  // マージ済みマスタを全端末に同期
       curFloor=null;render();alert(people.length+"名を読み込みました");
     }
     else alert("名簿シートを認識できませんでした");
