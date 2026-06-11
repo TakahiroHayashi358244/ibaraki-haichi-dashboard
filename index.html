@@ -971,7 +971,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.10";
+const APP_VERSION="2026.05.30.11";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1179,59 +1179,150 @@ function clearSearch(){
 }
 
 function norm(s){return (s||"").toString().normalize("NFKC").trim()}
+// セクション名から配置(OUT/IN/ICQA)を推定 ── Book14形式の名簿で使用
+const SECTION_TO_PLACE_GUESS={
+  PICK:"OUT",PACK:"OUT","Ship":"OUT",READ:"OUT",OUTQA:"OUT",SWEEPER:"OUT",ODM:"OUT","ODM":"OUT",
+  DOCK:"IN",QA:"IN",CHECHIN:"IN",CHECKIN:"IN","CHECK-IN":"IN",RECEIVE:"IN",EACHRECIVE:"IN","EACHRECEIVE":"IN",
+  RAP:"IN",SWEEP:"IN","SWEEP/F":"IN",FORK:"IN",DOCKLIFT:"IN",STOW:"IN",MOVE:"IN",CONTENA:"IN",
+  ICQA:"ICQA",CYCLECOUNT:"ICQA"
+};
+function guessPlace(sec){
+  const k=String(sec||"").toUpperCase().trim();
+  if(SECTION_TO_PLACE_GUESS[k])return SECTION_TO_PLACE_GUESS[k];
+  if(k==="ICQA"||k.includes("CYCLE"))return "ICQA";
+  if(k.includes("PICK")||k.includes("PACK")||k.includes("SHIP")||k.includes("READ"))return "OUT";
+  return "IN";  // デフォルト
+}
+function xlsxTimeStr(v){
+  if(v===null||v===undefined||v==="")return "";
+  if(typeof v==="string")return v;
+  if(typeof v==="number"){
+    const tm=Math.round(v*24*60);
+    return `${String(Math.floor(tm/60)).padStart(2,"0")}:${String(tm%60).padStart(2,"0")}`;
+  }
+  if(v instanceof Date)return `${String(v.getHours()).padStart(2,"0")}:${String(v.getMinutes()).padStart(2,"0")}`;
+  return String(v);
+}
+function xlsxHour(v){
+  if(typeof v==="number")return Math.floor(v*24);
+  if(v instanceof Date)return v.getHours();
+  const s=String(v||"");const m=s.match(/^(\d{1,2}):/);return m?parseInt(m[1]):-1;
+}
 function loadFile(ev){
   const f=ev.target.files[0];if(!f)return;
   const r=new FileReader();
   r.onload=e=>{
-    const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array",cellDates:true});
     const ws=wb.Sheets["名簿"]||wb.Sheets[wb.SheetNames[0]];
     const rows=XLSX.utils.sheet_to_json(ws,{header:1});
-    const master={OUT:[],IN:[],ICQA:[]},floors=[],people=[];
-    for(let i=1;i<rows.length;i++){
-      const r0=rows[i];if(!r0)continue;
-      [["OUT",13],["IN",14],["ICQA",15]].forEach(([k,idx])=>{const v=norm(r0[idx]);if(v&&!master[k].includes(v))master[k].push(v)});
-      const fv=norm(r0[17]);if(fv&&!floors.includes(fv))floors.push(fv);
-      if(!(/^\d+$/).test(String(r0[0]).trim()))continue;
-      let pl=norm(r0[2]).toUpperCase();if(!["OUT","IN","ICQA"].includes(pl))pl="OUT";
-      const sub=norm(r0[3]);if(sub&&!master[pl].includes(sub))master[pl].push(sub);
-      const lhNum=parseFloat(String(r0[10]||"").replace(/[^\d.]/g,""))||0;
-      people.push({no:+r0[0],role:norm(r0[1]),section:pl,subsec:sub,floor:norm(r0[4])||"4F",
-        name:norm(r0[5]),fork:String(r0[6]||"").includes("◯"),shift:norm(r0[7]),
-        startT:norm(r0[8]),endT:norm(r0[9]),lh:lhNum,batch:norm(r0[11])});
-    }
-    if(people.length){
-      if(!confirm("名簿を差し替えます。クラウド上の配置・追加メンバーがリセットされます(セクション編集の追加・削除は保持されます)。続行しますか?")){return}
-      // 既存マスタと xlsx 由来マスタをマージ ── 設定で手動追加したセクションを維持、削除されたセクションは復活させない
-      const hasExisting=DB.master&&Object.values(DB.master).some(a=>Array.isArray(a)&&a.length);
-      let mergedMaster;
-      if(hasExisting){
-        mergedMaster={OUT:[...(DB.master.OUT||[])],IN:[...(DB.master.IN||[])],ICQA:[...(DB.master.ICQA||[])]};
-        ["OUT","IN","ICQA"].forEach(pl=>{
-          master[pl].forEach(s=>{
-            // 削除リストに含まれていれば復活させない
-            if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
-            if(!mergedMaster[pl].includes(s))mergedMaster[pl].push(s);
-          });
+    // ヘッダー行で旧形式 / 新形式 (Book14形式) を判定
+    const hdr=(rows[0]||[]).map(x=>String(x||"").trim());
+    const isNewFormat=hdr.includes("会社名")||hdr.includes("業務")||hdr.includes("階");
+    let parsed;
+    try{parsed=isNewFormat?parseNewFormat(rows):parseOldFormat(rows)}
+    catch(err){console.error(err);alert("名簿の解析に失敗しました: "+err.message);return}
+    const {people,master,floors}=parsed;
+    if(!people.length){alert("名簿シートを認識できませんでした");return}
+    if(!confirm(`名簿を差し替えます(${people.length}名 / 形式:${isNewFormat?"新":"旧"})。\nクラウド上の配置・追加メンバーがリセットされます(セクション編集の追加・削除は保持されます)。続行しますか?`))return;
+    // 既存マスタと xlsx 由来マスタをマージ
+    const hasExisting=DB.master&&Object.values(DB.master).some(a=>Array.isArray(a)&&a.length);
+    let mergedMaster;
+    if(hasExisting){
+      mergedMaster={OUT:[...(DB.master.OUT||[])],IN:[...(DB.master.IN||[])],ICQA:[...(DB.master.ICQA||[])]};
+      ["OUT","IN","ICQA"].forEach(pl=>{
+        master[pl].forEach(s=>{
+          if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
+          if(!mergedMaster[pl].includes(s))mergedMaster[pl].push(s);
         });
-      }else{
-        // 初回 ── xlsx由来のマスタをそのまま採用(削除リストにあるものは除く)
-        mergedMaster={OUT:[],IN:[],ICQA:[]};
-        ["OUT","IN","ICQA"].forEach(pl=>{
-          master[pl].forEach(s=>{
-            if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
-            mergedMaster[pl].push(s);
-          });
+      });
+    }else{
+      mergedMaster={OUT:[],IN:[],ICQA:[]};
+      ["OUT","IN","ICQA"].forEach(pl=>{
+        master[pl].forEach(s=>{
+          if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
+          mergedMaster[pl].push(s);
         });
-      }
-      DB={people,master:mergedMaster,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
-      clearAllLayout();
-      if(window.fb)fb.remove(fb.rRef("custom"));
-      saveMaster();  // マージ済みマスタを全端末に同期
-      curFloor=null;render();alert(people.length+"名を読み込みました");
+      });
     }
-    else alert("名簿シートを認識できませんでした");
+    DB={people,master:mergedMaster,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
+    clearAllLayout();
+    if(window.fb)fb.remove(fb.rRef("custom"));
+    saveMaster();
+    curFloor=null;render();alert(people.length+"名を読み込みました");
   };
   r.readAsArrayBuffer(f);
+}
+// 旧形式: 配置.xlsx (B=職責 C=配置 D=セクション E=階層 F=氏名 G=フォーク H=シフト …)
+function parseOldFormat(rows){
+  const master={OUT:[],IN:[],ICQA:[]},floors=[],people=[];
+  for(let i=1;i<rows.length;i++){
+    const r0=rows[i];if(!r0)continue;
+    [["OUT",13],["IN",14],["ICQA",15]].forEach(([k,idx])=>{const v=norm(r0[idx]);if(v&&!master[k].includes(v))master[k].push(v)});
+    const fv=norm(r0[17]);if(fv&&!floors.includes(fv))floors.push(fv);
+    if(!(/^\d+$/).test(String(r0[0]).trim()))continue;
+    let pl=norm(r0[2]).toUpperCase();if(!["OUT","IN","ICQA"].includes(pl))pl="OUT";
+    const sub=norm(r0[3]);if(sub&&!master[pl].includes(sub))master[pl].push(sub);
+    const lhNum=parseFloat(String(r0[10]||"").replace(/[^\d.]/g,""))||0;
+    people.push({no:+r0[0],role:norm(r0[1]),section:pl,subsec:sub,floor:norm(r0[4])||"4F",
+      name:norm(r0[5]),fork:String(r0[6]||"").includes("◯"),shift:norm(r0[7]),
+      startT:norm(r0[8]),endT:norm(r0[9]),lh:lhNum,batch:norm(r0[11])});
+  }
+  return {people,master,floors};
+}
+// 新形式: Book14.xlsx (A=No B=会社名(=職責) C=名前 D=階 E=業務(=セクション) F=配置 G=LH H=出勤 I=退勤 J=休憩)
+// 行中に "▼ 日勤" "▼ 夜勤" 見出しでシフト区切り、"▼ IN" "▼ OUT" "▼ ICQA" で配置区切り
+function parseNewFormat(rows){
+  const master={OUT:[],IN:[],ICQA:[]},floors=new Set(),people=[];
+  let curShift="日勤",shiftFromHeading=false,placeOverride=null;
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];if(!r)continue;
+    const cellA=String(r[0]||"").trim();
+    // 見出し行検出: 「▼ ○○」または先頭が▼/▽ で始まり、業務系の値が無い行
+    if(cellA.startsWith("▼")||cellA.startsWith("▽")){
+      const lbl=cellA.replace(/^[▼▽\s]+/,"").trim();
+      if(lbl==="日勤"||lbl==="夜勤"){
+        curShift=lbl;shiftFromHeading=true;placeOverride=null;
+      }else if(["OUT","IN","ICQA"].includes(lbl.toUpperCase())){
+        placeOverride=lbl.toUpperCase();shiftFromHeading=false; // 配置切替後はシフトを時刻判定
+      }
+      continue;
+    }
+    // 数字始まりの行のみ取込(空行や注記行をスキップ)
+    if(!/^\d+$/.test(cellA))continue;
+    const no=parseInt(cellA);
+    const role=String(r[1]||"").trim();
+    const name=String(r[2]||"").trim();
+    if(!name)continue;  // 名前空欄(枠だけ)はスキップ
+    const floor=(String(r[3]||"").trim())||"4F";
+    floors.add(floor);
+    const subsec=String(r[4]||"").trim();
+    if(!subsec)continue;  // セクション(業務)空欄もスキップ
+    // 配置決定: F列「配置」が明記されていればそれ、無ければ「セクション名がICQA系→ICQA配置」を最優先、それ以外は見出し or セクション名から推定
+    let place=String(r[5]||"").trim().toUpperCase();
+    if(!["OUT","IN","ICQA"].includes(place)){
+      const guess=guessPlace(subsec);
+      // セクション名がICQA/CycleCount系なら見出しに関係なくICQA配置
+      if(guess==="ICQA")place="ICQA";
+      else place=placeOverride||guess;
+    }
+    if(!master[place].includes(subsec))master[place].push(subsec);
+    // シフト判定: 見出しが指定していればそちら、無ければ出勤時刻で判定
+    let shift=curShift;
+    if(!shiftFromHeading){
+      const h=xlsxHour(r[7]);
+      if(h>=0)shift=(h>=18||h<5)?"夜勤":"日勤";
+    }
+    const lh=parseFloat(String(r[6]||"").replace(/[^\d.]/g,""))||0;
+    // フォーク資格判定: セクション名に "Fork" や "/F" を含むなら有資格
+    const fork=/fork|\/F/i.test(subsec);
+    people.push({
+      no,role,section:place,subsec,floor,name,fork,shift,
+      startT:xlsxTimeStr(r[7]),endT:xlsxTimeStr(r[8]),lh,batch:""
+    });
+  }
+  // フロアが xlsx に1種類しかない場合でも、UI用にデフォルト5フロアを返す
+  const flArr=[...floors];
+  return {people,master,floors:flArr.length?flArr:[]};
 }
 render();
 </script>
