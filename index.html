@@ -971,7 +971,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.11";
+const APP_VERSION="2026.05.30.12";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1283,7 +1283,9 @@ function parseNewFormat(rows){
       if(lbl==="日勤"||lbl==="夜勤"){
         curShift=lbl;shiftFromHeading=true;placeOverride=null;
       }else if(["OUT","IN","ICQA"].includes(lbl.toUpperCase())){
-        placeOverride=lbl.toUpperCase();shiftFromHeading=false; // 配置切替後はシフトを時刻判定
+        placeOverride=lbl.toUpperCase();
+        shiftFromHeading=false;   // 配置切替後はシフトを時刻で判定
+        curShift="日勤";           // 配置区切り見出しは日勤前提にリセット(時刻があれば上書き判定)
       }
       continue;
     }
@@ -1291,21 +1293,28 @@ function parseNewFormat(rows){
     if(!/^\d+$/.test(cellA))continue;
     const no=parseInt(cellA);
     const role=String(r[1]||"").trim();
-    const name=String(r[2]||"").trim();
-    if(!name)continue;  // 名前空欄(枠だけ)はスキップ
+    let name=String(r[2]||"").trim();
+    // 名前空欄でも会社名(役職)があれば仮名で取り込み(例: 名簿の予約枠)
+    if(!name){
+      if(!role)continue;  // 会社名すらない=完全な空行はスキップ
+      name=`${role} #${no}`;  // 例: "トップスポット #11"
+    }
     const floor=(String(r[3]||"").trim())||"4F";
     floors.add(floor);
     const subsec=String(r[4]||"").trim();
-    if(!subsec)continue;  // セクション(業務)空欄もスキップ
+    // 業務(セクション)空欄でも取り込む(自動的に待機/欠勤枠に表示される)
     // 配置決定: F列「配置」が明記されていればそれ、無ければ「セクション名がICQA系→ICQA配置」を最優先、それ以外は見出し or セクション名から推定
     let place=String(r[5]||"").trim().toUpperCase();
     if(!["OUT","IN","ICQA"].includes(place)){
-      const guess=guessPlace(subsec);
-      // セクション名がICQA/CycleCount系なら見出しに関係なくICQA配置
-      if(guess==="ICQA")place="ICQA";
-      else place=placeOverride||guess;
+      if(subsec){
+        const guess=guessPlace(subsec);
+        if(guess==="ICQA")place="ICQA";
+        else place=placeOverride||guess;
+      }else{
+        place=placeOverride||"OUT";  // 業務空欄でも所属配置は持つ(待機表示)
+      }
     }
-    if(!master[place].includes(subsec))master[place].push(subsec);
+    if(subsec&&!master[place].includes(subsec))master[place].push(subsec);
     // シフト判定: 見出しが指定していればそちら、無ければ出勤時刻で判定
     let shift=curShift;
     if(!shiftFromHeading){
