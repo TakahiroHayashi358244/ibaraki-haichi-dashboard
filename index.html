@@ -530,6 +530,23 @@ function initFirebase(){
       });
     }
   });
+  // 名簿本体(xlsx由来の人員)の同期 ── 他PCでの読込を即時反映
+  fb.onValue(fb.rRef("roster"),snap=>{
+    const roster=snap.val();
+    if(Array.isArray(roster)&&roster.length){
+      // custom追加メンバーは別パスから入っているので維持
+      const customs=DB.people.filter(p=>p.custom);
+      DB.people=[...roster,...customs];
+      _roleAutoVer=-1;  // 職責の自動色キャッシュをリセット
+      render();
+      markSummaryStale();
+    }
+  });
+  // フロアリストの同期
+  fb.onValue(fb.rRef("floors"),snap=>{
+    const fl=snap.val();
+    if(Array.isArray(fl)&&fl.length){DB.floors=fl;render()}
+  });
   // 接続状態UI更新
   document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
   if(window.fbConnected!==undefined)updateConnIndicator(window.fbConnected);
@@ -539,6 +556,13 @@ function saveMaster(){
 }
 function saveDeleted(){
   if(window.fb)fb.set(fb.rRef("deletedSections"),deletedSections).catch(e=>console.error("saveDeleted",e));
+}
+function saveRoster(){
+  if(!window.fb)return;
+  // custom追加メンバーは /custom 側で管理しているので除外
+  const roster=DB.people.filter(p=>!p.custom);
+  fb.set(fb.rRef("roster"),roster).catch(e=>console.error("saveRoster",e));
+  fb.set(fb.rRef("floors"),DB.floors).catch(e=>console.error("saveFloors",e));
 }
 // サマリが開いている時に他端末で変更があったら更新ボタンを強調
 function markSummaryStale(){
@@ -971,7 +995,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.12";
+const APP_VERSION="2026.05.30.13";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1063,13 +1087,15 @@ function updateApp(){
   location.replace(url);
 }
 function wipeAll(){
-  if(!confirm("クラウドに保存された配置データ・追加メンバー・セクション編集をすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
+  if(!confirm("クラウドに保存された配置データ・追加メンバー・名簿・セクション編集をすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
   if(window.fb){
     fb.remove(fb.rRef("layout"));
     fb.remove(fb.rRef("floorMove"));
     fb.remove(fb.rRef("custom"));
     fb.remove(fb.rRef("master"));
     fb.remove(fb.rRef("deletedSections"));
+    fb.remove(fb.rRef("roster"));
+    fb.remove(fb.rRef("floors"));
   }
   localStorage.removeItem("haichi3_lastCheck");
   layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};
@@ -1248,7 +1274,8 @@ function loadFile(ev){
     clearAllLayout();
     if(window.fb)fb.remove(fb.rRef("custom"));
     saveMaster();
-    curFloor=null;render();alert(people.length+"名を読み込みました");
+    saveRoster();  // xlsx由来の名簿・フロアを全端末に同期
+    curFloor=null;render();alert(people.length+"名を読み込みました(全端末に反映されます)");
   };
   r.readAsArrayBuffer(f);
 }
