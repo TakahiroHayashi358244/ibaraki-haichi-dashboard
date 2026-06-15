@@ -88,6 +88,14 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .sec-add-form input{flex:1;padding:7px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:13px;font-family:inherit}
 .sec-add-form input:focus{outline:none;border-color:var(--accent)}
 .sec-add-form .btn{padding:7px 14px;font-size:12px}
+.qr-area{display:flex;gap:14px;align-items:flex-start;margin-top:8px;flex-wrap:wrap}
+.qr-box{padding:10px;background:#fff;border-radius:8px;border:1px solid var(--line);min-width:148px;min-height:148px;display:flex;align-items:center;justify-content:center}
+.qr-box svg{display:block;max-width:140px;height:auto}
+.qr-side{flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px}
+.qr-side input{padding:7px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--txt);font-size:11px;font-family:Consolas,Menlo,monospace;width:100%;box-sizing:border-box}
+.qr-side input:focus{outline:none;border-color:var(--accent)}
+.qr-actions{display:flex;gap:6px;flex-wrap:wrap}
+.qr-actions .btn{font-size:11px;padding:6px 11px}
 .setting-item{padding:14px 0;border-bottom:1px solid var(--line)}
 .setting-item:last-child{border-bottom:none}
 .setting-item.danger .setting-lbl{color:#dc2626}
@@ -392,6 +400,20 @@ input[type=file]{display:none}
       <button class="modal-x" onclick="closeSettings()">×</button>
     </div>
     <div class="modal-body">
+      <div class="setting-item">
+        <div class="setting-lbl">ダッシュボードURL</div>
+        <div class="setting-desc">他の端末からアクセスする際は、このQRコードをスマホ・タブレットで読み取ってください。</div>
+        <div class="qr-area">
+          <div id="qrCode" class="qr-box"></div>
+          <div class="qr-side">
+            <input type="text" id="qrUrl" readonly>
+            <div class="qr-actions">
+              <button class="btn" onclick="copyDashboardUrl()">📋 URLをコピー</button>
+              <button class="btn" onclick="shareDashboardUrl()">📤 共有</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="setting-item">
         <div class="setting-lbl">最新版に更新</div>
         <div class="setting-desc">サーバー(GitHub Pages)から最新のアプリを再取得します。配置データはそのまま保持されます。新機能や修正を反映する際に使ってください。</div>
@@ -1060,7 +1082,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.17";
+const APP_VERSION="2026.05.30.18";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1071,7 +1093,39 @@ function openSettings(){
     if(b.classList.contains("OUT"))b.classList.add("active");
   });
   renderSecEditList();
+  renderQRCode();
   document.getElementById("settingsModal").classList.add("open");
+}
+function renderQRCode(){
+  // クリーンURLを生成(キャッシュバイパスパラメータを除去)
+  const url=location.origin+location.pathname;
+  document.getElementById("qrUrl").value=url;
+  const box=document.getElementById("qrCode");
+  const enc=encodeURIComponent(url);
+  // QR画像API (qrserver.com) を利用 ── 軽量・ライブラリ不要
+  box.innerHTML=`<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=8&format=svg&data=${enc}" alt="ダッシュボードURLのQRコード" style="display:block;width:140px;height:140px" onerror="this.parentElement.innerHTML='<div style=&quot;font-size:10px;color:#dc2626;padding:8px;text-align:center&quot;>QR生成に失敗<br>(ネット未接続?)</div>'">`;
+}
+function copyDashboardUrl(){
+  const url=document.getElementById("qrUrl").value;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(()=>alert("URLをコピーしました")).catch(()=>fallbackCopyUrl(url));
+  }else{
+    fallbackCopyUrl(url);
+  }
+}
+function fallbackCopyUrl(url){
+  const el=document.getElementById("qrUrl");
+  el.select();el.setSelectionRange(0,99999);
+  try{document.execCommand("copy");alert("URLをコピーしました")}
+  catch(e){alert("コピーできませんでした。手動で選択してコピーしてください")}
+}
+function shareDashboardUrl(){
+  const url=document.getElementById("qrUrl").value;
+  if(navigator.share){
+    navigator.share({title:"配置ダッシュボード",text:"倉庫配置ダッシュボードを開く",url}).catch(()=>{});
+  }else{
+    copyDashboardUrl();
+  }
 }
 function closeSettings(){document.getElementById("settingsModal").classList.remove("open")}
 function selectSecTab(pl){
