@@ -545,7 +545,7 @@ function initFirebase(){
   // フロアリストの同期
   fb.onValue(fb.rRef("floors"),snap=>{
     const fl=snap.val();
-    if(Array.isArray(fl)&&fl.length){DB.floors=fl;render()}
+    if(Array.isArray(fl)&&fl.length){DB.floors=ensureAllFloors(fl);render()}
   });
   // 接続状態UI更新
   document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
@@ -995,7 +995,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.13";
+const APP_VERSION="2026.05.30.14";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1270,7 +1270,7 @@ function loadFile(ev){
         });
       });
     }
-    DB={people,master:mergedMaster,floors:floors.length?floors:["6F","5F","4F","3F","2F"]};
+    DB={people,master:mergedMaster,floors:ensureAllFloors(floors)};
     clearAllLayout();
     if(window.fb)fb.remove(fb.rRef("custom"));
     saveMaster();
@@ -1278,6 +1278,16 @@ function loadFile(ev){
     curFloor=null;render();alert(people.length+"名を読み込みました(全端末に反映されます)");
   };
   r.readAsArrayBuffer(f);
+}
+// フロアリストを常に標準5フロア(6F〜2F)を含む形に整形
+const DEFAULT_FLOORS=["6F","5F","4F","3F","2F"];
+function ensureAllFloors(arr){
+  const set=new Set(Array.isArray(arr)?arr:[]);
+  DEFAULT_FLOORS.forEach(f=>set.add(f));
+  // 上から下の順(6F→2F)を維持しつつ、xlsx由来の特殊フロア(1F等)を末尾に
+  const out=DEFAULT_FLOORS.filter(f=>set.has(f));
+  [...set].forEach(f=>{if(!out.includes(f))out.push(f)});
+  return out;
 }
 // 旧形式: 配置.xlsx (B=職責 C=配置 D=セクション E=階層 F=氏名 G=フォーク H=シフト …)
 function parseOldFormat(rows){
@@ -1294,7 +1304,7 @@ function parseOldFormat(rows){
       name:norm(r0[5]),fork:String(r0[6]||"").includes("◯"),shift:norm(r0[7]),
       startT:norm(r0[8]),endT:norm(r0[9]),lh:lhNum,batch:norm(r0[11])});
   }
-  return {people,master,floors};
+  return {people,master,floors:ensureAllFloors(floors)};
 }
 // 新形式: Book14.xlsx (A=No B=会社名(=職責) C=名前 D=階 E=業務(=セクション) F=配置 G=LH H=出勤 I=退勤 J=休憩)
 // 行中に "▼ 日勤" "▼ 夜勤" 見出しでシフト区切り、"▼ IN" "▼ OUT" "▼ ICQA" で配置区切り
@@ -1356,9 +1366,7 @@ function parseNewFormat(rows){
       startT:xlsxTimeStr(r[7]),endT:xlsxTimeStr(r[8]),lh,batch:""
     });
   }
-  // フロアが xlsx に1種類しかない場合でも、UI用にデフォルト5フロアを返す
-  const flArr=[...floors];
-  return {people,master,floors:flArr.length?flArr:[]};
+  return {people,master,floors:ensureAllFloors([...floors])};
 }
 render();
 </script>
