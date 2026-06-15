@@ -34,6 +34,20 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .btn.icon{padding:6px 10px;font-size:15px;line-height:1}
 .btn.add{background:#10b981;color:#fff;border-color:#10b981;font-weight:800}
 .btn.add:hover{background:#059669;color:#fff;border-color:#059669}
+.btn.paste{background:#f59e0b;color:#fff;border-color:#f59e0b;font-weight:700}
+.btn.paste:hover{background:#d97706;color:#fff;border-color:#d97706}
+.paste-help{font-size:12px;color:var(--sub);background:var(--panel2);padding:10px 12px;border-radius:8px;margin-bottom:12px;line-height:1.6}
+.paste-help p{margin:0}
+.paste-help .paste-note{margin-top:4px;font-size:11px}
+.paste-row{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px}
+.paste-row select{padding:5px 9px;border-radius:6px;border:1px solid var(--line);background:var(--panel);font-family:inherit;font-size:13px}
+#pasteArea{width:100%;height:220px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,Menlo,monospace;font-size:12px;background:var(--panel);color:var(--txt);box-sizing:border-box;resize:vertical}
+#pasteArea:focus{outline:none;border-color:var(--accent)}
+.paste-preview{margin-top:10px;font-size:12px;color:var(--sub);max-height:160px;overflow-y:auto;border:1px dashed var(--line);border-radius:6px;padding:6px;display:none}
+.paste-preview.show{display:block}
+.paste-preview .pp-row{padding:2px 4px}
+.paste-preview .pp-row b{color:var(--txt)}
+.paste-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .btn.summary{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800;box-shadow:0 2px 6px rgba(124,58,237,.25)}
 .btn.summary:hover{background:#6d28d9;color:#fff;border-color:#6d28d9}
 .frm{display:flex;flex-direction:column;gap:12px}
@@ -133,6 +147,9 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .card.dragging{opacity:.4;cursor:grabbing}
 .ghost-card{position:fixed!important;left:0;top:0;pointer-events:none;opacity:.92;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,.35);transform:scale(1.04);transition:none!important;margin:0!important}
 .ghost-card:hover{transform:scale(1.04)!important;box-shadow:0 12px 32px rgba(0,0,0,.35)!important}
+.drag-hint{position:fixed;pointer-events:none;z-index:10000;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;padding:7px 14px;border-radius:18px;font-size:13px;font-weight:700;box-shadow:0 6px 20px rgba(14,165,233,.4);font-family:inherit;white-space:nowrap;letter-spacing:.02em}
+.drag-hint .dh-arrow{font-size:15px;margin-right:3px}
+.drag-hint b{font-size:14px;color:#fff;font-weight:800}
 body.dragging-active{cursor:grabbing}
 body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .card .role{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
@@ -243,6 +260,7 @@ input[type=file]{display:none}
     </div>
     <button class="btn" onclick="document.getElementById('file').click()">名簿読込</button>
     <input type="file" id="file" accept=".xlsx" onchange="loadFile(event)">
+    <button class="btn paste" onclick="openPasteModal()" title="シフト表をコピペで取込">📋 コピペ取込</button>
     <button class="btn add" onclick="openAdd()">+ 追加</button>
     <button class="btn" onclick="resetLayout()">配置リセット</button>
     <button class="btn pdf" onclick="exportPDF()">PDF出力</button>
@@ -326,6 +344,43 @@ input[type=file]{display:none}
         </div>
       </div>
       <div class="custom-list-wrap" id="customListWrap"></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="pasteModal" onclick="if(event.target===this)closePasteModal()">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-head">
+      <h2>シフト表をコピペで取込</h2>
+      <button class="close" onclick="closePasteModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="paste-help">
+        <p>スプレッドシート(Excel/Googleシート)のシフト表を<b>ヘッダー行ごと</b>コピーして貼り付けてください。階層情報がない場合はここで指定します。</p>
+        <p class="paste-note">対応列: No. / 所属 / 氏名 / 勤務 / 業務 / LH / 出勤 / 退勤 / 休憩。「▼ 日勤」「▼ 夜勤」「▼ IN」などの見出し行もそのまま含めてOK。</p>
+      </div>
+      <div class="paste-row">
+        <label>配置先フロア</label>
+        <select id="pasteFloor">
+          <option value="6F">6F</option>
+          <option value="5F">5F</option>
+          <option value="4F" selected>4F</option>
+          <option value="3F">3F</option>
+          <option value="2F">2F</option>
+        </select>
+        <label style="margin-left:14px">取込モード</label>
+        <select id="pasteMode">
+          <option value="add">追加(既存に上乗せ)</option>
+          <option value="replace">差替(既存名簿を置換)</option>
+        </select>
+      </div>
+      <textarea id="pasteArea" placeholder="ここにスプレッドシートからコピーした内容を貼り付け…&#10;例:&#10;No.&#9;所属&#9;氏名&#9;勤務&#9;業務&#9;備考&#9;LH&#9;出勤&#9;退勤&#9;休憩&#10;▼ IN&#10;1&#9;Gworker&#9;福元 陽花&#9;IN&#9;Receive&#9;&#9;6.0&#9;10:00&#9;16:00&#9;0:00"></textarea>
+      <div id="pastePreview" class="paste-preview"></div>
+      <div class="paste-actions">
+        <button class="btn" onclick="closePasteModal()">キャンセル</button>
+        <button class="btn" onclick="previewPaste()">プレビュー</button>
+        <button class="btn primary" onclick="execPaste()">取込実行</button>
+      </div>
     </div>
   </div>
 </div>
@@ -717,7 +772,7 @@ function card(p){
 }
 // 統一ドラッグ実装 — マウス・タッチ・ペンすべてで動作
 function attachCardDrag(c,p){
-  let startX=0,startY=0,active=false,ghost=null,hoverSec=null,pid=null;
+  let startX=0,startY=0,active=false,ghost=null,hint=null,hoverSec=null,pid=null;
   const TH=6;  // この距離を超えるとドラッグ開始
   c.addEventListener("pointerdown",e=>{
     // セレクタ/ボタン上では発火しない
@@ -741,11 +796,19 @@ function attachCardDrag(c,p){
       document.body.appendChild(ghost);
       c.classList.add("dragging");
       document.body.classList.add("dragging-active");
+      // 待機からドラッグ時、移動先フロアを大きくヒント表示
+      if(locOf(p)==="WAIT"){
+        hint=document.createElement("div");
+        hint.className="drag-hint";
+        hint.innerHTML=`<span class="dh-arrow">↳</span> <b>${curFloor}</b> に配置`;
+        document.body.appendChild(hint);
+      }
     }
     // ゴーストを指/カーソルに追従
     const r=c.getBoundingClientRect();
     ghost.style.left=(e.clientX-r.width/2)+"px";
     ghost.style.top=(e.clientY-r.height/2)+"px";
+    if(hint){hint.style.left=(e.clientX+16)+"px";hint.style.top=(e.clientY+22)+"px"}
     // ドロップターゲット検出
     ghost.style.display="none";
     const under=document.elementFromPoint(e.clientX,e.clientY);
@@ -762,12 +825,14 @@ function attachCardDrag(c,p){
       if(ok && hoverSec){
         const loc=hoverSec.dataset.loc;
         const k=uidEnc(uid(p));
-        const wasWait=layout[k]==="WAIT";
+        // 表示上の待機判定 ── layout未設定でマスタ不在のため待機表示中の人も含めて検出
+        const wasWait=locOf(p)==="WAIT";
         if(wasWait && loc!=="WAIT")setFloorMove(k,curFloor);
         setLayout(k,loc);render();
       }
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(ghost){ghost.remove();ghost=null}
+      if(hint){hint.remove();hint=null}
       c.classList.remove("dragging");
       document.body.classList.remove("dragging-active");
     }
@@ -995,7 +1060,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.14";
+const APP_VERSION="2026.05.30.16";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1367,6 +1432,161 @@ function parseNewFormat(rows){
     });
   }
   return {people,master,floors:ensureAllFloors([...floors])};
+}
+
+// クリップボード形式(タブ区切り)を解析 ── スプレッドシートからの貼り付け対応
+function parseClipboardText(text,defaultFloor){
+  const lines=text.split(/\r?\n/);
+  const rows=lines.map(l=>l.split(/\t/));
+  // ヘッダー行検出(「氏名」または「名前」を含む行)
+  let hdrIdx=-1;
+  for(let i=0;i<rows.length;i++){
+    const cells=rows[i].map(c=>String(c||"").trim());
+    if(cells.includes("氏名")||cells.includes("名前")){hdrIdx=i;break}
+  }
+  if(hdrIdx<0)throw new Error("ヘッダー行(氏名/所属を含む行)が見つかりません");
+  const hdr=rows[hdrIdx].map(c=>String(c||"").trim());
+  const find=(...names)=>{for(const n of names){const i=hdr.indexOf(n);if(i>=0)return i}return -1};
+  const ci={
+    no:find("No.","No","No,","#"),
+    role:find("所属","会社名","会社"),
+    name:find("氏名","名前"),
+    shift:find("勤務","時間帯","シフト"),
+    sec:find("業務","セクション"),
+    lh:find("LH","労働時間"),
+    start:find("出勤","開始"),
+    end:find("退勤","終了")
+  };
+  const master={OUT:[],IN:[],ICQA:[]},people=[];
+  let curShift="日勤",placeOverride=null,shiftFromHeading=false;
+  let autoNo=1;
+  for(let i=hdrIdx+1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r)continue;
+    const a=String(r[0]||"").trim();
+    if(r.every(c=>!String(c||"").trim()))continue;
+    // 見出し行: ▼ 日勤 / ▼ 夜勤 / ▼ IN など
+    if(a.startsWith("▼")||a.startsWith("▽")){
+      const lbl=a.replace(/^[▼▽\s]+/,"").trim();
+      if(lbl==="日勤"||lbl==="夜勤"){curShift=lbl;shiftFromHeading=true;placeOverride=null}
+      else if(["OUT","IN","ICQA"].includes(lbl.toUpperCase())){
+        placeOverride=lbl.toUpperCase();shiftFromHeading=false;curShift="日勤";
+      }
+      continue;
+    }
+    const role=ci.role>=0?String(r[ci.role]||"").trim():"";
+    let name=ci.name>=0?String(r[ci.name]||"").trim():"";
+    if(!name){
+      if(!role)continue;
+      name=`${role} #${autoNo}`;
+    }
+    const subsec=ci.sec>=0?String(r[ci.sec]||"").trim():"";
+    const shiftCell=ci.shift>=0?String(r[ci.shift]||"").trim():"";
+    // 勤務列の値を解釈:「IN/OUT/ICQA」=配置、「日勤/夜勤」=シフト
+    let rowShift=null,rowPlaceFromShiftCol=null;
+    if(shiftCell==="日勤"||shiftCell==="夜勤")rowShift=shiftCell;
+    else if(["OUT","IN","ICQA"].includes(shiftCell.toUpperCase()))rowPlaceFromShiftCol=shiftCell.toUpperCase();
+    // 配置決定
+    let place=rowPlaceFromShiftCol||placeOverride||(subsec?guessPlace(subsec):"OUT");
+    if(subsec&&guessPlace(subsec)==="ICQA")place="ICQA";  // ICQA系優先
+    if(subsec&&!master[place].includes(subsec))master[place].push(subsec);
+    // シフト決定
+    let shift=rowShift||(shiftFromHeading?curShift:null);
+    if(!shift){
+      // 出勤時刻で推定
+      const h=xlsxHour(r[ci.start>=0?ci.start:7]);
+      shift=(h>=0&&(h>=18||h<5))?"夜勤":"日勤";
+    }
+    const fork=/fork|\/F/i.test(subsec);
+    const lh=ci.lh>=0?(parseFloat(String(r[ci.lh]||"").replace(/[^\d.]/g,""))||0):0;
+    people.push({
+      no:parseInt(r[ci.no>=0?ci.no:0])||autoNo,
+      role,name,section:place,subsec,floor:defaultFloor,fork,shift,
+      startT:ci.start>=0?xlsxTimeStr(r[ci.start]):"",
+      endT:ci.end>=0?xlsxTimeStr(r[ci.end]):"",
+      lh,batch:""
+    });
+    autoNo++;
+  }
+  return {people,master,floors:ensureAllFloors([defaultFloor])};
+}
+
+// コピペ取込モーダル制御
+function openPasteModal(){
+  document.getElementById("pasteFloor").value=curFloor||"4F";
+  document.getElementById("pasteArea").value="";
+  document.getElementById("pastePreview").classList.remove("show");
+  document.getElementById("pasteModal").classList.add("open");
+  setTimeout(()=>document.getElementById("pasteArea").focus(),100);
+}
+function closePasteModal(){document.getElementById("pasteModal").classList.remove("open")}
+function previewPaste(){
+  const text=document.getElementById("pasteArea").value;
+  const floor=document.getElementById("pasteFloor").value;
+  if(!text.trim()){alert("内容を貼り付けてください");return}
+  try{
+    const parsed=parseClipboardText(text,floor);
+    const prev=document.getElementById("pastePreview");
+    const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+    let html=`<div class="pp-row"><b>${parsed.people.length}名</b> を解析しました(配置先: ${floor})</div>`;
+    const byPl={OUT:0,IN:0,ICQA:0};const byShift={日勤:0,夜勤:0};
+    parsed.people.forEach(p=>{byPl[p.section]=(byPl[p.section]||0)+1;byShift[p.shift]=(byShift[p.shift]||0)+1});
+    html+=`<div class="pp-row">配置別: OUT <b>${byPl.OUT}</b> / IN <b>${byPl.IN}</b> / ICQA <b>${byPl.ICQA}</b></div>`;
+    html+=`<div class="pp-row">シフト別: 日勤 <b>${byShift.日勤}</b> / 夜勤 <b>${byShift.夜勤}</b></div>`;
+    html+=`<div class="pp-row">───────</div>`;
+    parsed.people.slice(0,12).forEach(p=>{
+      html+=`<div class="pp-row">${esc(p.role)} <b>${esc(p.name)}</b> / ${p.section}|${esc(p.subsec)||'(空)'} / ${p.shift}${p.fork?' / F':''}</div>`;
+    });
+    if(parsed.people.length>12)html+=`<div class="pp-row">…他 ${parsed.people.length-12} 名</div>`;
+    prev.innerHTML=html;prev.classList.add("show");
+  }catch(err){alert("解析エラー: "+err.message)}
+}
+function execPaste(){
+  const text=document.getElementById("pasteArea").value;
+  const floor=document.getElementById("pasteFloor").value;
+  const mode=document.getElementById("pasteMode").value;
+  if(!text.trim()){alert("内容を貼り付けてください");return}
+  let parsed;
+  try{parsed=parseClipboardText(text,floor)}
+  catch(err){alert("解析エラー: "+err.message);return}
+  if(!parsed.people.length){alert("取り込める行がありませんでした");return}
+  const msg=mode==="replace"
+    ?`${parsed.people.length}名で名簿を差し替えますか?\n既存の配置・カスタム追加メンバーはリセットされます(セクション編集の追加・削除は保持)。`
+    :`${parsed.people.length}名を既存名簿に追加しますか?\n(同じ氏名の人は更新されます)`;
+  if(!confirm(msg))return;
+  // マスタ統合
+  const hasExisting=DB.master&&Object.values(DB.master).some(a=>Array.isArray(a)&&a.length);
+  let mergedMaster;
+  if(hasExisting){
+    mergedMaster={OUT:[...(DB.master.OUT||[])],IN:[...(DB.master.IN||[])],ICQA:[...(DB.master.ICQA||[])]};
+    ["OUT","IN","ICQA"].forEach(pl=>{
+      parsed.master[pl].forEach(s=>{
+        if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
+        if(!mergedMaster[pl].includes(s))mergedMaster[pl].push(s);
+      });
+    });
+  }else{
+    mergedMaster={OUT:[],IN:[],ICQA:[]};
+    ["OUT","IN","ICQA"].forEach(pl=>{
+      parsed.master[pl].forEach(s=>{if(!(deletedSections[pl]&&deletedSections[pl].includes(s)))mergedMaster[pl].push(s)});
+    });
+  }
+  if(mode==="replace"){
+    DB={people:parsed.people,master:mergedMaster,floors:ensureAllFloors(parsed.floors)};
+    clearAllLayout();
+    if(window.fb)fb.remove(fb.rRef("custom"));
+  }else{
+    // 追加モード: 同名は新データで上書き、新規は追加
+    const map=new Map(DB.people.filter(p=>!p.custom).map(p=>[p.name,p]));
+    parsed.people.forEach(p=>map.set(p.name,p));
+    const newRoster=[...map.values()];
+    const customs=DB.people.filter(p=>p.custom);
+    DB={people:[...newRoster,...customs],master:mergedMaster,floors:ensureAllFloors([...DB.floors,floor])};
+  }
+  _roleAutoVer=-1;
+  saveMaster();saveRoster();
+  closePasteModal();render();
+  alert(`${parsed.people.length}名を取り込みました(全端末に反映されます)`);
 }
 render();
 </script>
