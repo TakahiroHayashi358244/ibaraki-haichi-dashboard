@@ -87,6 +87,8 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .card-popover .pop-name{font-size:13px;font-weight:700}
 .card-popover .pop-meta{font-size:10px;opacity:.7;margin-top:3px}
 .multi-mode #ftabs{opacity:.4;pointer-events:none}
+.multi-mode .zoom-ctrl{opacity:.35;pointer-events:none}
+.multi-mode .zoom-ctrl::after{content:"固定";font-size:9px;color:var(--sub);margin-left:4px}
 .multi-mode #legend{display:none}
 .multi-mode footer{display:none}
 .multi-mode .stats{flex-wrap:wrap}
@@ -620,6 +622,7 @@ function toggleViewMode(){
     btn.textContent=viewMode==="multi"?"⏍ 単一":"⏍ 全フロア";
   }
   render();
+  applyZoom();  // モード切替時にズーム再適用(multi=1倍固定、single=保存値復元)
 }
 let curFloor=null;
 let searchQ="";
@@ -965,6 +968,12 @@ function createMultiSec(f,pl,s,fp){
   sec.appendChild(cards);
   return sec;
 }
+// アバター丸に表示する1文字 ── 氏名の頭文字、数字のみの場合は会社名(役職)の頭文字
+function avatarChar(p){
+  const n=String(p.name||"").trim();
+  if(!n||/^\d+$/.test(n))return (p.role||"?")[0];
+  return n[0];
+}
 function card(p){
   const c=document.createElement("div");c.className="card"+(p.admin?" admin":"");
   // multi モード用のメタ情報(丸バッジ表示時のFマーク・夜勤マーク用)
@@ -979,7 +988,7 @@ function card(p){
   c.style.borderLeftColor=st.bg;
   c.style.paddingLeft="5px";
   const opts=DB.floors.map(f=>`<option value="${f}"${f===floorOf(p)?" selected":""}>${f}</option>`).join("");
-  c.innerHTML=`${p.admin?'<span class="admin-mark">管理者</span>':''}<div class="av" style="background:${st.bg};color:${st.fg}">${p.role[0]}</div><div class="role ${p.role}" style="color:${st.bg}">${p.role}</div>
+  c.innerHTML=`${p.admin?'<span class="admin-mark">管理者</span>':''}<div class="av" style="background:${st.bg};color:${st.fg}">${avatarChar(p)}</div><div class="role ${p.role}" style="color:${st.bg}">${p.role}</div>
     <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
     <span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
     <select class="fsel" title="フロア異動">${opts}</select></div>`;
@@ -1334,26 +1343,27 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.28";
+const APP_VERSION="2026.05.30.30";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
 function applyZoom(){
   const el=document.getElementById("scroll");
   if(el){
-    // zoom プロパティを使用(Chromium・Safari・Firefox 126+ で対応)
-    el.style.zoom=curZoom;
+    // multi(全フロア)モード時はズーム固定で1倍、単一フロア時のみ curZoom を適用
+    el.style.zoom=viewMode==="multi"?1:curZoom;
   }
   const pct=document.getElementById("zoomPct");
   if(pct)pct.textContent=Math.round(curZoom*100)+"%";
   localStorage.setItem("haichi3_zoom",String(curZoom));
 }
-function zoomIn(){curZoom=Math.min(1.8,Math.round((curZoom+0.1)*10)/10);applyZoom()}
-function zoomOut(){curZoom=Math.max(0.5,Math.round((curZoom-0.1)*10)/10);applyZoom()}
-function zoomReset(){curZoom=1;applyZoom()}
-// Ctrl/Cmd + マウスホイール でズーム操作(配置エリア上のみ)
+function zoomIn(){if(viewMode==="multi")return;curZoom=Math.min(1.8,Math.round((curZoom+0.1)*10)/10);applyZoom()}
+function zoomOut(){if(viewMode==="multi")return;curZoom=Math.max(0.5,Math.round((curZoom-0.1)*10)/10);applyZoom()}
+function zoomReset(){if(viewMode==="multi")return;curZoom=1;applyZoom()}
+// Ctrl/Cmd + マウスホイール でズーム操作(単一フロアの配置エリア上のみ。multi モードでは無効)
 document.addEventListener("wheel",e=>{
   if(!(e.ctrlKey||e.metaKey))return;
+  if(viewMode==="multi")return;
   const inScroll=e.target.closest("#scroll");
   if(!inScroll)return;
   e.preventDefault();
