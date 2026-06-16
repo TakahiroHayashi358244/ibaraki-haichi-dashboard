@@ -96,6 +96,13 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .qr-side input:focus{outline:none;border-color:var(--accent)}
 .qr-actions{display:flex;gap:6px;flex-wrap:wrap}
 .qr-actions .btn{font-size:11px;padding:6px 11px}
+.btn.admin-btn{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#d97706;font-weight:700}
+.btn.admin-btn:hover{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border-color:#b45309}
+/* 管理者カード ── 金色リングで識別、王冠アイコン */
+.card.admin{box-shadow:0 0 0 2px #fbbf24,0 2px 8px rgba(245,158,11,.25);background:linear-gradient(180deg,#fffbeb 0%,var(--panel) 30%)}
+.card.admin:hover{box-shadow:0 0 0 2px #f59e0b,0 6px 18px rgba(245,158,11,.35)}
+.card.admin .admin-mark{position:absolute;top:-8px;left:-4px;background:#f59e0b;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:8px;border:2px solid var(--panel);letter-spacing:.04em;line-height:1.3}
+.admin-mark::before{content:"👑 ";font-size:9px}
 .setting-item{padding:14px 0;border-bottom:1px solid var(--line)}
 .setting-item:last-child{border-bottom:none}
 .setting-item.danger .setting-lbl{color:#dc2626}
@@ -210,6 +217,13 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .sumdetail{margin-bottom:10px}
 .sumdetail .plh{text-align:left}
 .sumdetail .plh:nth-child(2),.sumdetail .plh:nth-child(3){text-align:right;font-size:11px}
+.sum-admin-note{background:linear-gradient(135deg,#fef3c7,#fde68a);color:#92400e;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:12px;border:1px solid #f59e0b}
+.admin-col{background:#fef3c7;color:#92400e;font-weight:700;text-align:center;font-size:11px}
+.adm-tot{display:inline-block;margin-left:10px;padding:2px 8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:10px;font-size:11px;font-weight:700}
+.adm-add{display:inline-block;margin-left:3px;color:#d97706;font-size:10px;font-weight:700}
+.adm-only{color:#d97706;font-weight:700}
+.nm-admin{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:11px;margin:1px 3px 1px 0;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;white-space:nowrap}
+.nm-sep{display:inline-block;margin:0 4px;color:#94a3b8;font-size:11px}
 .sumtbl td.nmcell{text-align:left;padding:4px 6px;line-height:1.7;color:var(--sub)}
 .sumtbl td.nmcell .nm{display:inline-block;font-size:11px;font-weight:700;padding:2px 7px;border-radius:11px;margin:1px 3px 1px 0;background:#f1f5f9;color:var(--txt);border:1px solid #e2e8f0;white-space:nowrap}
 .nm.sv{background:#fef3c7;color:#92400e;border-color:#fde68a}
@@ -415,6 +429,16 @@ input[type=file]{display:none}
         </div>
       </div>
       <div class="setting-item">
+        <div class="setting-lbl">👑 管理者配置の読込</div>
+        <div class="setting-desc">職責=<b>Manager</b>の人員を「管理者」として取り込みます。<br>管理者カードは<span style="color:#d97706;font-weight:700">金色のリング</span>で識別され、配置リセット・名簿差替・コピペ取込でも消えません。再度読み込むと管理者リストが更新されます。</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn admin-btn" onclick="document.getElementById('adminFile').click()">👑 管理者xlsxを選択</button>
+          <input type="file" id="adminFile" accept=".xlsx" onchange="loadAdminFile(event)" style="display:none">
+          <span id="adminCount" style="font-size:12px;color:var(--sub)"></span>
+          <button class="btn" onclick="clearAdmins()" style="margin-left:auto;font-size:11px">管理者をクリア</button>
+        </div>
+      </div>
+      <div class="setting-item">
         <div class="setting-lbl">最新版に更新</div>
         <div class="setting-desc">サーバー(GitHub Pages)から最新のアプリを再取得します。配置データはそのまま保持されます。新機能や修正を反映する際に使ってください。</div>
         <button class="btn primary" onclick="updateApp()">最新版を取得して再読込</button>
@@ -613,7 +637,8 @@ function initFirebase(){
     if(Array.isArray(roster)&&roster.length){
       // custom追加メンバーは別パスから入っているので維持
       const customs=DB.people.filter(p=>p.custom);
-      DB.people=[...roster,...customs];
+      const admins=DB.people.filter(p=>p.admin);
+      DB.people=[...roster,...customs,...admins];
       _roleAutoVer=-1;  // 職責の自動色キャッシュをリセット
       render();
       markSummaryStale();
@@ -623,6 +648,20 @@ function initFirebase(){
   fb.onValue(fb.rRef("floors"),snap=>{
     const fl=snap.val();
     if(Array.isArray(fl)&&fl.length){DB.floors=ensureAllFloors(fl);render()}
+  });
+  // 管理者(Manager)の同期 ── 別パスで独立管理。通常名簿の差替・リセットの影響を受けない
+  fb.onValue(fb.rRef("admins"),snap=>{
+    const admins=snap.val();
+    // 既存の admin を一旦除外して、新しい admin で置換
+    const nonAdmins=DB.people.filter(p=>!p.admin);
+    if(Array.isArray(admins)&&admins.length){
+      DB.people=[...nonAdmins,...admins.map(a=>({...a,admin:true}))];
+    }else{
+      DB.people=nonAdmins;
+    }
+    _roleAutoVer=-1;
+    render();
+    markSummaryStale();
   });
   // 接続状態UI更新
   document.addEventListener("fbConnection",e=>updateConnIndicator(e.detail));
@@ -636,10 +675,16 @@ function saveDeleted(){
 }
 function saveRoster(){
   if(!window.fb)return;
-  // custom追加メンバーは /custom 側で管理しているので除外
-  const roster=DB.people.filter(p=>!p.custom);
+  // custom追加メンバー・管理者(admin)は別パスで管理しているので除外
+  const roster=DB.people.filter(p=>!p.custom&&!p.admin);
   fb.set(fb.rRef("roster"),roster).catch(e=>console.error("saveRoster",e));
   fb.set(fb.rRef("floors"),DB.floors).catch(e=>console.error("saveFloors",e));
+}
+function saveAdmins(){
+  if(!window.fb)return;
+  // admin プロパティを除いた pure data を保存
+  const admins=DB.people.filter(p=>p.admin).map(p=>{const {admin,...rest}=p;return rest});
+  fb.set(fb.rRef("admins"),admins).catch(e=>console.error("saveAdmins",e));
 }
 // サマリが開いている時に他端末で変更があったら更新ボタンを強調
 function markSummaryStale(){
@@ -773,7 +818,7 @@ function render(){
   renderLegend();
 }
 function card(p){
-  const c=document.createElement("div");c.className="card";
+  const c=document.createElement("div");c.className="card"+(p.admin?" admin":"");
   if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
   // カードの左ボーダーとアバターを職責色に
   const st=roleStyle(p.role);
@@ -781,7 +826,7 @@ function card(p){
   c.style.borderLeftColor=st.bg;
   c.style.paddingLeft="5px";
   const opts=DB.floors.map(f=>`<option value="${f}"${f===floorOf(p)?" selected":""}>${f}</option>`).join("");
-  c.innerHTML=`<div class="av" style="background:${st.bg};color:${st.fg}">${p.role[0]}</div><div class="role ${p.role}" style="color:${st.bg}">${p.role}</div>
+  c.innerHTML=`${p.admin?'<span class="admin-mark">管理者</span>':''}<div class="av" style="background:${st.bg};color:${st.fg}">${p.role[0]}</div><div class="role ${p.role}" style="color:${st.bg}">${p.role}</div>
     <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
     <span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
     <select class="fsel" title="フロア異動">${opts}</select></div>`;
@@ -894,12 +939,16 @@ function renderHitbar(){
   wrap.innerHTML="";wrap.appendChild(bar);
 }
 function renderStats(v){
+  const allOnFloor=v;
+  const adminN=v.filter(p=>p.admin).length;
+  v=v.filter(p=>!p.admin);  // 集計対象は管理者除外
   const fork=v.filter(p=>p.fork).length;
   const wait=v.filter(p=>locOf(p)==="WAIT").length;
-  const allWait=DB.people.filter(p=>p.shift===curShift && locOf(p)==="WAIT").length;
+  const allWait=DB.people.filter(p=>p.shift===curShift && !p.admin && locOf(p)==="WAIT").length;
   const bp=pl=>v.filter(p=>locOf(p).split("|")[0]===pl).length;
+  const adminTag=adminN?` <span style="color:#d97706;font-weight:700">👑 管理者 ${adminN}名</span>`:'';
   document.getElementById("stats").innerHTML=
-    `<span><b>${curShift}・${curFloor}</b> <b>${v.length}</b>名</span>`+
+    `<span><b>${curShift}・${curFloor}</b> 実稼働<b>${v.length}</b>名${adminTag}</span>`+
     `<span>稼働 <b>${v.length-wait}</b>名</span>`+
     `<span>OUT <b>${bp('OUT')}</b> / IN <b>${bp('IN')}</b> / ICQA <b>${bp('ICQA')}</b></span>`+
     `<span>フォーク <b>${fork}</b>名</span><span>待機/欠勤(全体) <b>${allWait}</b>名</span>`;
@@ -931,60 +980,76 @@ function openSummary(){
   // 更新ボタンの通知マークをクリア
   const rb=document.getElementById("sumRefresh");
   if(rb)rb.classList.remove("has-update");
-  const v=DB.people.filter(p=>p.shift===curShift);
-  const fl=DB.floors.filter(f=>v.some(p=>floorOf(p)===f));
-  document.getElementById("summaryTitle").textContent=`配置サマリ（${curShift}）`;
+  // 集計対象から管理者を完全除外(HC・LH両方)
+  const all=DB.people.filter(p=>p.shift===curShift);
+  const v=all.filter(p=>!p.admin);
+  const adminP=all.filter(p=>p.admin);
+  const fl=DB.floors.filter(f=>all.some(p=>floorOf(p)===f));
+  document.getElementById("summaryTitle").textContent=`配置サマリ(${curShift})`;
   const body=document.getElementById("summaryBody");
   if(fl.length===0){body.innerHTML=`<p class="sumnote">${curShift}の出勤予定者がいません。</p>`;document.getElementById("summaryModal").classList.add("open");return}
-  const lhSum=arr=>arr.reduce((s,p)=>s+(p.lh||0),0);
+  const lhSum=arr=>arr.reduce((s,p)=>s+(p.lh||0),0);  // 集計対象は事前に admin 除外済み
   const fmtLH=n=>(Math.round(n*10)/10).toString().replace(/\.0$/,"");
   let html="";
-  // 全フロア合計の早見表（フロア × 大枠：人数 / LH）
-  html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">合計</th></tr><tr><th>名</th><th>LH</th><th>名</th><th>LH</th><th>名</th><th>LH</th><th>名</th><th>LH</th><th class="rowtot">名</th><th class="rowtot">LH</th></tr>`;
+  // 管理者の注釈
+  if(adminP.length){
+    html+=`<div class="sum-admin-note">👑 管理者 ${adminP.length}名 は HC(人数)・LH 集計から除外し、別枠で表示しています</div>`;
+  }
+  // 全フロア合計の早見表 ── 「管理者」列を追加
+  html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">実稼働 合計</th><th class="admin-col" rowspan="2">👑<br>管理者</th></tr><tr><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th class="rowtot">HC</th><th class="rowtot">LH</th></tr>`;
   DB.floors.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
+    const fa=adminP.filter(p=>floorOf(p)===f);
     const grp=pl=>pl==="WAIT"?fp.filter(p=>locOf(p)==="WAIT"):fp.filter(p=>locOf(p).split("|")[0]===pl);
     const h=floorHue(f);
-    const empty=fp.length===0;
+    const empty=fp.length===0&&fa.length===0;
     const tds=["OUT","IN","ICQA","WAIT"].map(pl=>{
       const g=grp(pl);return `<td class="${g.length?'has':'z'}">${g.length}</td><td class="${g.length?'lh':'z'}">${g.length?fmtLH(lhSum(g)):0}</td>`;
     }).join("");
-    html+=`<tr${empty?' class="emptyrow"':''}><td class="secname" style="border-left:5px solid hsl(${h},60%,50%)">${f}</td>${tds}<td class="rowtot">${fp.length}</td><td class="rowtot">${empty?0:fmtLH(lhSum(fp))}</td></tr>`;
+    html+=`<tr${empty?' class="emptyrow"':''}><td class="secname" style="border-left:5px solid hsl(${h},60%,50%)">${f}</td>${tds}<td class="rowtot">${fp.length}</td><td class="rowtot">${empty?0:fmtLH(lhSum(fp))}</td><td class="admin-col">${fa.length||'<span class="z">0</span>'}</td></tr>`;
   });
   const allgrp=pl=>pl==="WAIT"?v.filter(p=>locOf(p)==="WAIT"):v.filter(p=>locOf(p).split("|")[0]===pl);
   const alltds=["OUT","IN","ICQA","WAIT"].map(pl=>{const g=allgrp(pl);return `<td>${g.length}</td><td>${fmtLH(lhSum(g))}</td>`}).join("");
-  html+=`<tr class="rowtot"><td class="secname rowtot">全フロア</td>${alltds}<td>${v.length}</td><td>${fmtLH(lhSum(v))}</td></tr></table></div>`;
+  html+=`<tr class="rowtot"><td class="secname rowtot">全フロア</td>${alltds}<td>${v.length}</td><td>${fmtLH(lhSum(v))}</td><td class="admin-col">${adminP.length||0}</td></tr></table></div>`;
 
-  // フロアごとの工程別内訳（人数 / LH / バイネーム）
+  // フロアごとの工程別内訳(管理者は別枠で各セクションに併記)
   fl.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
+    const fa=adminP.filter(p=>floorOf(p)===f);
     const h=floorHue(f);
-    html+=`<div class="sumblock"><h3><span class="ft" style="background:hsl(${h},60%,46%)">${f}</span><span class="tot">計 ${fp.length}名 / LH ${fmtLH(lhSum(fp))}</span></h3>`;
+    html+=`<div class="sumblock"><h3><span class="ft" style="background:hsl(${h},60%,46%)">${f}</span><span class="tot">実稼働 ${fp.length}名 / LH ${fmtLH(lhSum(fp))}</span>${fa.length?`<span class="adm-tot">👑 管理者 ${fa.length}名</span>`:''}</h3>`;
     ["OUT","IN","ICQA"].forEach(pl=>{
       const subs=DB.master[pl];
       const plGrp=fp.filter(p=>locOf(p).split("|")[0]===pl);
+      const plAdmin=fa.filter(p=>locOf(p).split("|")[0]===pl);
       let rows="";
       subs.forEach(s=>{
         const mem=fp.filter(p=>locOf(p)===pl+"|"+s).sort(sortPeople);
+        const memAdm=fa.filter(p=>locOf(p)===pl+"|"+s).sort(sortPeople);
         const lhT=lhSum(mem);
-        const names=mem.map(p=>{
+        const renderPill=p=>{
           const st=roleStyle(p.role);
-          // 明度判定して薄色背景に整える(濃色は文字色をbg、薄色背景は塗りで)
-          const isInverse=st.fg!=="#fff";  // Gworkerなど特殊配色
+          const isInverse=st.fg!=="#fff";
           const bg=isInverse?st.bg:hexToRgba(st.bg,.16);
           const fg=isInverse?st.fg:st.bg;
           const bd=isInverse?st.bg:hexToRgba(st.bg,.35);
           return `<span class="nm" style="background:${bg};color:${fg};border-color:${bd}">${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`;
-        }).join("");
-        rows+=`<tr><td class="secname">${s}</td><td class="${mem.length?'has':'z'}">${mem.length}</td><td class="${mem.length?'lh':'z'}">${mem.length?fmtLH(lhT):0}</td><td class="nmcell">${names||'<span class="z">—</span>'}</td></tr>`;
+        };
+        const names=mem.map(renderPill).join("");
+        const adminNames=memAdm.map(p=>`<span class="nm-admin">👑 ${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`).join("");
+        // 通常メンバー + 管理者枠
+        const cellNames=[names,adminNames].filter(Boolean).join(adminNames&&names?'<span class="nm-sep">/</span>':'')||'<span class="z">—</span>';
+        const hcCell=mem.length?mem.length+(memAdm.length?`<span class="adm-add">+${memAdm.length}</span>`:''):(memAdm.length?`<span class="adm-only">${memAdm.length}</span>`:0);
+        rows+=`<tr><td class="secname">${s}</td><td class="${mem.length||memAdm.length?'has':'z'}">${hcCell}</td><td class="${mem.length?'lh':'z'}">${mem.length?fmtLH(lhT):0}</td><td class="nmcell">${cellNames}</td></tr>`;
       });
-      html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:45px"><col style="width:55px"><col></colgroup>`+
-        `<tr><td class="plh ${pl}">${pl}</td><td class="plh ${pl}">${plGrp.length}名</td><td class="plh ${pl}">LH ${fmtLH(lhSum(plGrp))}</td><td class="plh ${pl}"></td></tr>${rows}</table>`;
+      const headHC=plGrp.length+(plAdmin.length?`<span class="adm-add">+${plAdmin.length}</span>`:'');
+      html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:60px"><col style="width:55px"><col></colgroup>`+
+        `<tr><td class="plh ${pl}">${pl}</td><td class="plh ${pl}">${headHC}名</td><td class="plh ${pl}">LH ${fmtLH(lhSum(plGrp))}</td><td class="plh ${pl}"></td></tr>${rows}</table>`;
     });
     const waitMem=fp.filter(p=>locOf(p)==="WAIT");
     if(waitMem.length){
       const names=waitMem.map(p=>`<span class="nm op">${p.name}</span>`).join("");
-      html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:45px"><col style="width:55px"><col></colgroup>`+
+      html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:60px"><col style="width:55px"><col></colgroup>`+
         `<tr><td class="plh" style="background:#94a3b8">待機/欠勤</td><td class="plh" style="background:#94a3b8">${waitMem.length}名</td><td class="plh" style="background:#94a3b8">LH ${fmtLH(lhSum(waitMem))}</td><td class="plh" style="background:#94a3b8"></td></tr>`+
         `<tr><td class="secname">—</td><td>${waitMem.length}</td><td class="lh">${fmtLH(lhSum(waitMem))}</td><td class="nmcell">${names}</td></tr></table>`;
     }
@@ -1082,7 +1147,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.18";
+const APP_VERSION="2026.05.30.21";
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1094,7 +1159,62 @@ function openSettings(){
   });
   renderSecEditList();
   renderQRCode();
+  // 管理者人数を表示
+  const adminCnt=DB.people.filter(p=>p.admin).length;
+  const adminCntEl=document.getElementById("adminCount");
+  if(adminCntEl)adminCntEl.textContent=adminCnt?`現在 ${adminCnt}名 の管理者を登録中`:"管理者未登録";
   document.getElementById("settingsModal").classList.add("open");
+}
+function loadAdminFile(ev){
+  const f=ev.target.files[0];if(!f)return;
+  ev.target.value="";  // 同じファイルを再選択できるようリセット
+  const r=new FileReader();
+  r.onload=e=>{
+    let wb;
+    try{wb=XLSX.read(new Uint8Array(e.target.result),{type:"array",cellDates:true})}
+    catch(err){alert("xlsxの読み込みに失敗: "+err.message);return}
+    const ws=wb.Sheets["名簿"]||wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1});
+    const hdr=(rows[0]||[]).map(x=>String(x||"").trim());
+    const isNewFormat=hdr.includes("会社名")||hdr.includes("業務")||hdr.includes("階");
+    let parsed;
+    try{parsed=isNewFormat?parseNewFormat(rows):parseOldFormat(rows)}
+    catch(err){alert("名簿の解析に失敗しました: "+err.message);return}
+    // 職責=Manager の人だけを管理者として抽出
+    const managers=parsed.people.filter(p=>p.role==="Manager");
+    if(!managers.length){alert("Manager職責の人員が見つかりませんでした。\n管理者xlsxには職責列に「Manager」と記載してください。");return}
+    if(!confirm(`${managers.length}名の管理者(Manager)を取り込みます。\n既存の管理者リストは新しいリストで置き換えられます(全端末に同期)。\n続行しますか?`))return;
+    // 既存 admin を除外し、新 admin で置換
+    const nonAdmins=DB.people.filter(p=>!p.admin);
+    const newAdmins=managers.map(p=>({...p,admin:true}));
+    DB.people=[...nonAdmins,...newAdmins];
+    // 管理者xlsxに新セクションがあればマスタにも追加
+    ["OUT","IN","ICQA"].forEach(pl=>{
+      parsed.master[pl].forEach(s=>{
+        if(deletedSections[pl]&&deletedSections[pl].includes(s))return;
+        if(!DB.master[pl].includes(s))DB.master[pl].push(s);
+      });
+    });
+    _roleAutoVer=-1;
+    saveAdmins();
+    saveMaster();
+    render();
+    const cnt=document.getElementById("adminCount");
+    if(cnt)cnt.textContent=`現在 ${newAdmins.length}名 の管理者を登録中`;
+    alert(`${newAdmins.length}名の管理者を取り込みました(全端末に反映されます)`);
+  };
+  r.readAsArrayBuffer(f);
+}
+function clearAdmins(){
+  const cnt=DB.people.filter(p=>p.admin).length;
+  if(!cnt){alert("管理者は登録されていません");return}
+  if(!confirm(`管理者${cnt}名をすべて削除しますか?(全端末から削除されます)`))return;
+  DB.people=DB.people.filter(p=>!p.admin);
+  if(window.fb)fb.remove(fb.rRef("admins"));
+  _roleAutoVer=-1;
+  render();
+  const el=document.getElementById("adminCount");
+  if(el)el.textContent="管理者未登録";
 }
 function renderQRCode(){
   // クリーンURLを生成(キャッシュバイパスパラメータを除去)
@@ -1206,7 +1326,7 @@ function updateApp(){
   location.replace(url);
 }
 function wipeAll(){
-  if(!confirm("クラウドに保存された配置データ・追加メンバー・名簿・セクション編集をすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
+  if(!confirm("クラウドに保存された配置データ・追加メンバー・名簿・管理者・セクション編集をすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
   if(window.fb){
     fb.remove(fb.rRef("layout"));
     fb.remove(fb.rRef("floorMove"));
@@ -1215,8 +1335,10 @@ function wipeAll(){
     fb.remove(fb.rRef("deletedSections"));
     fb.remove(fb.rRef("roster"));
     fb.remove(fb.rRef("floors"));
+    fb.remove(fb.rRef("admins"));
   }
   localStorage.removeItem("haichi3_lastCheck");
+  localStorage.setItem("haichi3_wiped","1");  // 次回起動時の表示をクリーンに
   layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};
   alert("削除しました。ページを再読み込みします。");
   location.reload();
@@ -1389,12 +1511,20 @@ function loadFile(ev){
         });
       });
     }
-    DB={people,master:mergedMaster,floors:ensureAllFloors(floors)};
+    // 管理者(admin)は通常名簿の差替時も保持
+    const adminsKeep=DB.people.filter(p=>p.admin);
+    // 管理者が使っているセクションも マスタに必ず残す(配置に居続けられるように)
+    adminsKeep.forEach(p=>{
+      if(p.section&&p.subsec&&mergedMaster[p.section]&&!mergedMaster[p.section].includes(p.subsec)){
+        mergedMaster[p.section].push(p.subsec);
+      }
+    });
+    DB={people:[...people,...adminsKeep],master:mergedMaster,floors:ensureAllFloors(floors)};
     clearAllLayout();
     if(window.fb)fb.remove(fb.rRef("custom"));
     saveMaster();
     saveRoster();  // xlsx由来の名簿・フロアを全端末に同期
-    curFloor=null;render();alert(people.length+"名を読み込みました(全端末に反映されます)");
+    curFloor=null;render();alert(people.length+"名を読み込みました(管理者は保持・全端末に反映されます)");
   };
   r.readAsArrayBuffer(f);
 }
@@ -1625,17 +1755,24 @@ function execPaste(){
       parsed.master[pl].forEach(s=>{if(!(deletedSections[pl]&&deletedSections[pl].includes(s)))mergedMaster[pl].push(s)});
     });
   }
+  const adminsKeep=DB.people.filter(p=>p.admin);  // 管理者は常に保持
+  // 管理者が使っているセクションもマスタに必ず残す
+  adminsKeep.forEach(p=>{
+    if(p.section&&p.subsec&&mergedMaster[p.section]&&!mergedMaster[p.section].includes(p.subsec)){
+      mergedMaster[p.section].push(p.subsec);
+    }
+  });
   if(mode==="replace"){
-    DB={people:parsed.people,master:mergedMaster,floors:ensureAllFloors(parsed.floors)};
+    DB={people:[...parsed.people,...adminsKeep],master:mergedMaster,floors:ensureAllFloors(parsed.floors)};
     clearAllLayout();
     if(window.fb)fb.remove(fb.rRef("custom"));
   }else{
     // 追加モード: 同名は新データで上書き、新規は追加
-    const map=new Map(DB.people.filter(p=>!p.custom).map(p=>[p.name,p]));
+    const map=new Map(DB.people.filter(p=>!p.custom&&!p.admin).map(p=>[p.name,p]));
     parsed.people.forEach(p=>map.set(p.name,p));
     const newRoster=[...map.values()];
     const customs=DB.people.filter(p=>p.custom);
-    DB={people:[...newRoster,...customs],master:mergedMaster,floors:ensureAllFloors([...DB.floors,floor])};
+    DB={people:[...newRoster,...customs,...adminsKeep],master:mergedMaster,floors:ensureAllFloors([...DB.floors,floor])};
   }
   _roleAutoVer=-1;
   saveMaster();saveRoster();
