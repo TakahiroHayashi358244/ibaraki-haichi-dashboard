@@ -32,6 +32,12 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .btn:hover{border-color:var(--accent);color:var(--accent)}
 .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .btn.icon{padding:6px 10px;font-size:15px;line-height:1}
+.zoom-ctrl{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:3px;background:var(--panel);margin-right:2px}
+.zoom-ctrl .zb{width:24px;height:24px;border:none;background:transparent;border-radius:5px;cursor:pointer;font-size:15px;line-height:1;font-weight:700;color:var(--txt);padding:0}
+.zoom-ctrl .zb:hover{background:var(--panel2)}
+.zoom-ctrl .zb:active{background:var(--line)}
+.zoom-ctrl .zpct{display:inline-block;min-width:42px;text-align:center;font-size:11px;font-weight:700;color:var(--sub);font-variant-numeric:tabular-nums;cursor:pointer;padding:2px 4px;border-radius:4px}
+.zoom-ctrl .zpct:hover{background:var(--panel2);color:var(--txt)}
 .btn.add{background:#10b981;color:#fff;border-color:#10b981;font-weight:800}
 .btn.add:hover{background:#059669;color:#fff;border-color:#059669}
 .btn.paste{background:#f59e0b;color:#fff;border-color:#f59e0b;font-weight:700}
@@ -258,6 +264,7 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
   header,.stats,#hitbarWrap,.scroll,.legend,footer,.modal-bg{display:none !important}
   html,body{background:#fff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #printArea{display:block !important;zoom:0.9}
+  #scroll{zoom:1 !important}
   .print-floor{page-break-after:always;break-after:page}
   .print-floor:last-child{page-break-after:auto;break-after:auto}
   .print-place,.print-sec,.print-card{break-inside:avoid;page-break-inside:avoid}
@@ -287,6 +294,11 @@ input[type=file]{display:none}
     <button class="btn" onclick="resetLayout()">配置リセット</button>
     <button class="btn pdf" onclick="exportPDF()">PDF出力</button>
     <button class="btn primary" onclick="printAll()">印刷</button>
+    <div class="zoom-ctrl" title="表示の拡大縮小">
+      <button class="zb" onclick="zoomOut()" title="縮小">−</button>
+      <span class="zpct" id="zoomPct" onclick="zoomReset()" title="クリックで100%に戻す">100%</span>
+      <button class="zb" onclick="zoomIn()" title="拡大">+</button>
+    </div>
     <button class="btn icon" onclick="openSettings()" title="設定">⚙</button>
   </div>
 </header>
@@ -1147,7 +1159,33 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.21";
+const APP_VERSION="2026.05.30.23";
+// ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
+let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
+if(curZoom<0.5||curZoom>1.8)curZoom=1;
+function applyZoom(){
+  const el=document.getElementById("scroll");
+  if(el){
+    // zoom プロパティを使用(Chromium・Safari・Firefox 126+ で対応)
+    el.style.zoom=curZoom;
+  }
+  const pct=document.getElementById("zoomPct");
+  if(pct)pct.textContent=Math.round(curZoom*100)+"%";
+  localStorage.setItem("haichi3_zoom",String(curZoom));
+}
+function zoomIn(){curZoom=Math.min(1.8,Math.round((curZoom+0.1)*10)/10);applyZoom()}
+function zoomOut(){curZoom=Math.max(0.5,Math.round((curZoom-0.1)*10)/10);applyZoom()}
+function zoomReset(){curZoom=1;applyZoom()}
+// Ctrl/Cmd + マウスホイール でズーム操作(配置エリア上のみ)
+document.addEventListener("wheel",e=>{
+  if(!(e.ctrlKey||e.metaKey))return;
+  const inScroll=e.target.closest("#scroll");
+  if(!inScroll)return;
+  e.preventDefault();
+  if(e.deltaY<0)zoomIn();else zoomOut();
+},{passive:false});
+// 起動時に保存された倍率を適用
+window.addEventListener("DOMContentLoaded",()=>setTimeout(applyZoom,50));
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
@@ -1584,6 +1622,9 @@ function parseNewFormat(rows){
     if(!name){
       if(!role)continue;  // 会社名すらない=完全な空行はスキップ
       name=`${role} #${no}`;  // 例: "トップスポット #11"
+    }else if(/^\d+$/.test(name)&&role){
+      // 数字のみの名前 → 所属名を前置して識別しやすく
+      name=`${role} ${name}`;
     }
     const floor=(String(r[3]||"").trim())||"4F";
     floors.add(floor);
@@ -1663,6 +1704,9 @@ function parseClipboardText(text,defaultFloor){
     if(!name){
       if(!role)continue;
       name=`${role} #${autoNo}`;
+    }else if(/^\d+$/.test(name)&&role){
+      // 数字のみの名前 → 所属名を前置して識別しやすく(例: "1" → "クロスワーカー 1")
+      name=`${role} ${name}`;
     }
     const subsec=ci.sec>=0?String(r[ci.sec]||"").trim():"";
     const shiftCell=ci.shift>=0?String(r[ci.shift]||"").trim():"";
