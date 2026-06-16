@@ -1159,7 +1159,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.23";
+const APP_VERSION="2026.05.30.24";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -1811,9 +1811,11 @@ function execPaste(){
     clearAllLayout();
     if(window.fb)fb.remove(fb.rRef("custom"));
   }else{
-    // 追加モード: 同名は新データで上書き、新規は追加
-    const map=new Map(DB.people.filter(p=>!p.custom&&!p.admin).map(p=>[p.name,p]));
-    parsed.people.forEach(p=>map.set(p.name,p));
+    // 追加モード: 同名・同所属は新データで上書き、新規は追加
+    // ※ キーを「所属+氏名」にすることで、同名でも別所属の人(クロスワーカーの1とトップスポットの1など)を別人として扱う
+    const k=p=>`${p.role}|${p.name}`;
+    const map=new Map(DB.people.filter(p=>!p.custom&&!p.admin).map(p=>[k(p),p]));
+    parsed.people.forEach(p=>map.set(k(p),p));
     const newRoster=[...map.values()];
     const customs=DB.people.filter(p=>p.custom);
     DB={people:[...newRoster,...customs,...adminsKeep],master:mergedMaster,floors:ensureAllFloors([...DB.floors,floor])};
