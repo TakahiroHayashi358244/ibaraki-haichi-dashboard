@@ -13,14 +13,13 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;transition:background .25s}
-header{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:11px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:60;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.title{display:flex;align-items:baseline;gap:11px}
-.title h1{font-size:18px;letter-spacing:.04em;font-weight:800}
-.title .meta{font-size:11px;color:var(--sub)}
-.conn-ind{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:auto}
-.conn-ind.on{background:#d1fae5;color:#047857}
-.conn-ind.off{background:#fee2e2;color:#b91c1c}
-.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:60;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.app-title{display:inline-flex;align-items:baseline;gap:8px;font-size:15px;letter-spacing:.02em;font-weight:800;margin:0;white-space:nowrap;color:var(--txt)}
+.app-title .meta{font-size:10px;color:var(--sub);font-weight:500}
+.app-title .conn-ind{font-size:11px;font-weight:700}
+.app-title .conn-ind.on{color:#10b981}
+.app-title .conn-ind.off{color:#ef4444}
+.toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1}
 .tabs{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:3px}
 .tab{padding:6px 16px;border-radius:7px;cursor:pointer;font-size:13px;font-weight:700;color:var(--sub);border:none;background:none;font-family:inherit;transition:.15s}
 .tab.active{background:var(--day);color:#fff}
@@ -38,6 +37,59 @@ header{display:flex;align-items:center;justify-content:space-between;gap:14px;pa
 .zoom-ctrl .zb:active{background:var(--line)}
 .zoom-ctrl .zpct{display:inline-block;min-width:42px;text-align:center;font-size:11px;font-weight:700;color:var(--sub);font-variant-numeric:tabular-nums;cursor:pointer;padding:2px 4px;border-radius:4px}
 .zoom-ctrl .zpct:hover{background:var(--panel2);color:var(--txt)}
+.btn.view-toggle{background:var(--panel);color:var(--txt);font-size:11px;padding:5px 11px}
+.btn.view-toggle.active{background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border-color:#2563eb;font-weight:700}
+.btn.view-toggle.active:hover{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff}
+/* 全フロアビュー (multi mode) ── 横長フロア行 × OUTBOUND/INBOUND の2列。スクロールなしで1画面に収める */
+.multi-grid{display:grid;grid-template-columns:1fr 120px;gap:5px;padding:5px;height:calc(100vh - 150px);min-height:480px;align-items:stretch}
+.multi-floors{display:grid;grid-template-rows:repeat(var(--multi-rows,5),1fr);gap:4px;min-height:0}
+.floor-row{display:grid;grid-template-columns:48px minmax(0,3fr) minmax(0,5fr) minmax(0,1.4fr);gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;min-height:0}
+.fr-label{color:#fff;font-weight:800;display:flex;flex-direction:column;justify-content:center;align-items:center;letter-spacing:.02em;font-size:13px;padding:2px}
+.fr-label .fr-n{font-size:9px;background:rgba(255,255,255,.25);padding:1px 5px;border-radius:8px;font-weight:700;margin-top:2px}
+.fr-area{display:flex;flex-direction:column;min-width:0;min-height:0;padding:2px;overflow:hidden}
+.fr-area-head{font-size:9px;font-weight:800;letter-spacing:.08em;color:#fff;padding:2px 8px;border-radius:4px;margin-bottom:2px;display:inline-block;width:fit-content}
+.fr-area-head.OUT{background:#f97316}
+.fr-area-head.IN{background:#0d9488}
+.fr-area-head.ICQA{background:#7c3aed}
+.fr-secs{display:flex;flex-wrap:wrap;gap:3px;align-items:flex-start;min-height:0;overflow:auto;flex:1}
+.fr-secs::-webkit-scrollbar{width:5px;height:5px}
+.fr-secs::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
+.mc-sec{border:1px dashed var(--line);border-radius:5px;padding:2px 3px;background:rgba(255,255,255,.5);transition:all .15s;min-width:0;flex:0 1 auto;display:flex;flex-direction:column;gap:2px}
+.mc-sec.dragover{background:rgba(59,130,246,.15);border-style:solid;border-color:#3b82f6}
+.mc-sec-lbl{font-size:8px;font-weight:800;display:flex;gap:3px;letter-spacing:.04em;text-transform:uppercase;align-items:center}
+.mc-sec-lbl .n{background:rgba(0,0,0,.1);padding:0 4px;border-radius:5px;font-size:8px;color:inherit}
+.mc-cards{display:flex;flex-wrap:wrap;gap:2px;align-content:flex-start;min-height:14px}
+/* 全フロアビュー内のカードは「丸バッジのみ」表示 ── 役職アバターのみ見せる */
+.multi-mode .mc-cards .card,.multi-mode .mw-cards .card{
+  padding:0!important;margin:0!important;border:none!important;background:transparent!important;
+  width:24px!important;height:24px!important;border-left:none!important;box-shadow:none!important;
+  border-radius:50%!important;position:relative;cursor:pointer;overflow:visible
+}
+.multi-mode .mc-cards .card:hover,.multi-mode .mw-cards .card:hover{transform:scale(1.18);z-index:5}
+.multi-mode .mc-cards .card .av,.multi-mode .mw-cards .card .av{
+  position:static!important;width:24px!important;height:24px!important;font-size:11px;border-width:2px;border-color:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.18)
+}
+.multi-mode .mc-cards .card .role,.multi-mode .mc-cards .card .name,.multi-mode .mc-cards .card .badges,
+.multi-mode .mw-cards .card .role,.multi-mode .mw-cards .card .name,.multi-mode .mw-cards .card .badges{display:none!important}
+/* admin の管理者リング */
+.multi-mode .mc-cards .card.admin,.multi-mode .mw-cards .card.admin{box-shadow:0 0 0 2px #fbbf24!important}
+.multi-mode .mc-cards .card.admin .admin-mark,.multi-mode .mw-cards .card.admin .admin-mark{display:none}
+/* 待機エリア (右側、5フロア通し) */
+.multi-wait{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.mw-head{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;color:#475569;padding:3px 6px;background:#e2e8f0;border-radius:5px;margin-bottom:5px}
+.mw-head .mw-n{background:#94a3b8;color:#fff;padding:1px 7px;border-radius:9px;font-size:10px}
+.mw-sec{flex:1;overflow:auto;border:1px dashed #cbd5e1;border-radius:5px;padding:4px;background:#fff}
+.mw-sec.dragover{background:rgba(59,130,246,.12);border-style:solid;border-color:#3b82f6}
+.mw-cards{display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start}
+/* タップで名前ポップオーバー */
+.card-popover{position:fixed;background:#1e293b;color:#fff;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:600;z-index:9999;pointer-events:none;box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:240px;line-height:1.4}
+.card-popover .pop-role{font-size:9px;opacity:.7;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:2px}
+.card-popover .pop-name{font-size:13px;font-weight:700}
+.card-popover .pop-meta{font-size:10px;opacity:.7;margin-top:3px}
+.multi-mode #ftabs{opacity:.4;pointer-events:none}
+.multi-mode #legend{display:none}
+.multi-mode footer{display:none}
+.multi-mode .stats{flex-wrap:wrap}
 .btn.add{background:#10b981;color:#fff;border-color:#10b981;font-weight:800}
 .btn.add:hover{background:#059669;color:#fff;border-color:#059669}
 .btn.paste{background:#f59e0b;color:#fff;border-color:#f59e0b;font-weight:700}
@@ -275,14 +327,15 @@ input[type=file]{display:none}
 </head>
 <body>
 <header>
-  <div class="title"><h1>配置ダッシュボード</h1><span class="meta" id="floorMeta"></span><span class="conn-ind off" id="connIndicator" title="クラウド同期状態">● 接続確認中</span></div>
   <div class="toolbar">
+    <h1 class="app-title">配置ダッシュボード<span class="meta" id="floorMeta"></span><span class="conn-ind off" id="connIndicator" title="クラウド同期状態">●</span></h1>
     <button class="btn summary" onclick="openSummary()">サマリ</button>
     <div class="search-wrap">
       <input class="search" id="search" placeholder="氏名で検索...">
       <button class="search-clear" id="searchClear" onclick="clearSearch()" title="検索終了">×</button>
     </div>
     <div class="ftabs" id="ftabs"></div>
+    <button id="viewToggle" class="btn view-toggle" onclick="toggleViewMode()" title="全フロアを横並びで表示">⏍ 全フロア</button>
     <div class="tabs">
       <button class="tab active" data-shift="日勤" onclick="setShift('日勤',this)">日勤</button>
       <button class="tab night" data-shift="夜勤" onclick="setShift('夜勤',this)">夜勤</button>
@@ -556,6 +609,18 @@ let layout={};                // 工程: uid -> "PLACE|SUBSEC" or "WAIT"
 let floorMove={};             // フロア異動: uid -> "5F"
 let deletedSections={OUT:[],IN:[],ICQA:[]};  // 設定で削除されたセクションを記録(xlsx再読込でも復活させない)
 let curShift="日勤";
+let viewMode=localStorage.getItem("haichi3_view")||"single";  // "single"=1フロア / "multi"=全フロア横並び
+function toggleViewMode(){
+  viewMode=viewMode==="multi"?"single":"multi";
+  localStorage.setItem("haichi3_view",viewMode);
+  document.body.classList.toggle("multi-mode",viewMode==="multi");
+  const btn=document.getElementById("viewToggle");
+  if(btn){
+    btn.classList.toggle("active",viewMode==="multi");
+    btn.textContent=viewMode==="multi"?"⏍ 単一":"⏍ 全フロア";
+  }
+  render();
+}
 let curFloor=null;
 let searchQ="";
 let fbInited=false;
@@ -708,7 +773,8 @@ function markSummaryStale(){
 function updateConnIndicator(connected){
   const el=document.getElementById("connIndicator");
   if(!el)return;
-  el.textContent=connected?"● 同期中":"● オフライン";
+  el.textContent="●";
+  el.title=connected?"クラウド同期 接続中":"クラウド同期 オフライン";
   el.className="conn-ind "+(connected?"on":"off");
   const ds=document.getElementById("connStatus");
   if(ds)ds.textContent=connected?"接続中":"オフライン";
@@ -798,11 +864,17 @@ function render(){
   applyFloorTheme();
   const fl=activeFloors();
   const root=document.getElementById("scroll");root.innerHTML="";
+  document.getElementById("floorMeta").textContent=
+    viewMode==="multi"?`全${DB.floors.length}フロア`
+                      :`${curFloor} / 全${fl.length}F`;
+  renderHitbar();
+  if(viewMode==="multi"){renderMulti(root);return}
+  renderSingle(root);
+}
+function renderSingle(root){
   const visible=DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor);
   // 待機/欠勤は階層に関係なく当該シフトの全員から
   const allWait=DB.people.filter(p=>p.shift===curShift && locOf(p)==="WAIT");
-  document.getElementById("floorMeta").textContent=`${curFloor} を表示中 / 全${fl.length}フロア`;
-  renderHitbar();
   const places=document.createElement("div");places.className="places";
   PLACES.forEach(pl=>{
     const place=document.createElement("div");place.className="place "+pl;
@@ -829,8 +901,77 @@ function render(){
   renderStats(DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor));
   renderLegend();
 }
+function renderMulti(root){
+  // 横長フロア行レイアウト ── 縦に5フロア積み重ね、各フロアは OUTBOUND | INBOUND | 待機共通
+  const grid=document.createElement("div");grid.className="multi-grid";
+  const allShift=DB.people.filter(p=>p.shift===curShift);
+  // 左側: フロア行が縦に並ぶ
+  const floorsArea=document.createElement("div");floorsArea.className="multi-floors";
+  DB.floors.forEach(f=>{
+    const row=document.createElement("div");row.className="floor-row";row.dataset.floor=f;
+    const h=floorHue(f);
+    const fp=allShift.filter(p=>floorOf(p)===f);
+    // フロアラベル
+    const lbl=document.createElement("div");lbl.className="fr-label";
+    lbl.style.background=`hsl(${h},55%,46%)`;
+    lbl.innerHTML=`<span class="fr-name">${f}</span><span class="fr-n">${fp.length}</span>`;
+    row.appendChild(lbl);
+    // OUTBOUND 部 ─ OUT の各セクション
+    const outArea=document.createElement("div");outArea.className="fr-area fr-out";
+    outArea.innerHTML=`<div class="fr-area-head OUT">OUTBOUND</div>`;
+    const outSecs=document.createElement("div");outSecs.className="fr-secs";
+    DB.master.OUT.forEach(s=>{outSecs.appendChild(createMultiSec(f,"OUT",s,fp))});
+    outArea.appendChild(outSecs);
+    row.appendChild(outArea);
+    // INBOUND 部 ─ IN のセクション
+    const inArea=document.createElement("div");inArea.className="fr-area fr-in";
+    inArea.innerHTML=`<div class="fr-area-head IN">INBOUND</div>`;
+    const inSecs=document.createElement("div");inSecs.className="fr-secs";
+    DB.master.IN.forEach(s=>{inSecs.appendChild(createMultiSec(f,"IN",s,fp))});
+    inArea.appendChild(inSecs);
+    row.appendChild(inArea);
+    // ICQA 部 ─ 独立した第3列(品質管理)
+    const icqaArea=document.createElement("div");icqaArea.className="fr-area fr-icqa";
+    icqaArea.innerHTML=`<div class="fr-area-head ICQA">ICQA</div>`;
+    const icqaSecs=document.createElement("div");icqaSecs.className="fr-secs";
+    DB.master.ICQA.forEach(s=>{icqaSecs.appendChild(createMultiSec(f,"ICQA",s,fp))});
+    icqaArea.appendChild(icqaSecs);
+    row.appendChild(icqaArea);
+    floorsArea.appendChild(row);
+  });
+  grid.appendChild(floorsArea);
+  // 右側: 待機/欠勤(全フロア共通)
+  const waitCol=document.createElement("div");waitCol.className="multi-wait";
+  const waitMem=allShift.filter(p=>locOf(p)==="WAIT");
+  waitCol.innerHTML=`<div class="mw-head"><span>待機/欠勤</span><span class="mw-n">${waitMem.length}</span></div>`;
+  const waitSec=document.createElement("div");waitSec.className="sec mw-sec";waitSec.dataset.loc="WAIT";
+  const waitCards=document.createElement("div");waitCards.className="cards mw-cards";
+  waitMem.forEach(p=>waitCards.appendChild(card(p)));
+  waitSec.appendChild(waitCards);waitCol.appendChild(waitSec);
+  grid.appendChild(waitCol);
+  root.appendChild(grid);
+  renderStats(allShift);
+  renderLegend();
+}
+function createMultiSec(f,pl,s,fp){
+  const loc=pl+"|"+s;
+  const cl=secColor[loc]||"#94a3b8";
+  const mem=fp.filter(p=>locOf(p)===loc).sort(sortPeople);
+  const sec=document.createElement("div");sec.className="sec mc-sec";sec.dataset.loc=loc;
+  sec.style.borderColor=hexToRgba(cl,.4);sec.style.background=hexToRgba(cl,.06);
+  sec.innerHTML=`<div class="mc-sec-lbl" style="color:${cl}"><span>${s}</span>${mem.length?`<span class="n">${mem.length}</span>`:''}</div>`;
+  const cards=document.createElement("div");cards.className="cards mc-cards";
+  mem.forEach(p=>cards.appendChild(card(p)));
+  sec.appendChild(cards);
+  return sec;
+}
 function card(p){
   const c=document.createElement("div");c.className="card"+(p.admin?" admin":"");
+  // multi モード用のメタ情報(丸バッジ表示時のFマーク・夜勤マーク用)
+  c.dataset.fork=p.fork?"1":"";
+  c.dataset.shift=p.shift||"";
+  // ホバー時のツールチップ(全モード共通)
+  c.title=`${p.role} / ${p.name}`+(p.fork?" (F)":"")+(p.shift==="夜勤"?" (夜勤)":"")+(p.admin?" 👑管理者":"");
   if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
   // カードの左ボーダーとアバターを職責色に
   const st=roleStyle(p.role);
@@ -848,6 +989,21 @@ function card(p){
   sel.addEventListener("pointerdown",e=>e.stopPropagation());
   sel.addEventListener("change",e=>{setFloorMove(uidEnc(uid(p)),e.target.value);render()});
   return c;
+}
+// multi モードでカードをタップ/クリックしたとき、名前を一時的にポップオーバー表示
+let _cardPopover=null;
+function showCardPopover(p,anchor){
+  if(_cardPopover){_cardPopover.remove();_cardPopover=null}
+  const pop=document.createElement("div");pop.className="card-popover";
+  pop.innerHTML=`<div class="pop-role">${p.role}</div><div class="pop-name">${p.name}</div><div class="pop-meta">${p.shift}${p.fork?' / フォーク':''}${p.admin?' / 👑管理者':''}</div>`;
+  document.body.appendChild(pop);
+  _cardPopover=pop;
+  const r=anchor.getBoundingClientRect();
+  const left=Math.min(window.innerWidth-pop.offsetWidth-10,Math.max(8,r.left+r.width/2-pop.offsetWidth/2));
+  let top=r.bottom+8;
+  if(top+pop.offsetHeight>window.innerHeight-10)top=r.top-pop.offsetHeight-8;
+  pop.style.left=left+"px";pop.style.top=top+"px";
+  setTimeout(()=>{if(pop===_cardPopover){pop.remove();_cardPopover=null}},2500);
 }
 // 統一ドラッグ実装 — マウス・タッチ・ペンすべてで動作
 function attachCardDrag(c,p){
@@ -879,7 +1035,9 @@ function attachCardDrag(c,p){
       if(locOf(p)==="WAIT"){
         hint=document.createElement("div");
         hint.className="drag-hint";
-        hint.innerHTML=`<span class="dh-arrow">↳</span> <b>${curFloor}</b> に配置`;
+        hint.innerHTML=viewMode==="multi"
+          ?`<span class="dh-arrow">↳</span> ドロップ先フロアへ`
+          :`<span class="dh-arrow">↳</span> <b>${curFloor}</b> に配置`;
         document.body.appendChild(hint);
       }
     }
@@ -887,7 +1045,10 @@ function attachCardDrag(c,p){
     const r=c.getBoundingClientRect();
     ghost.style.left=(e.clientX-r.width/2)+"px";
     ghost.style.top=(e.clientY-r.height/2)+"px";
-    if(hint){hint.style.left=(e.clientX+16)+"px";hint.style.top=(e.clientY+22)+"px"}
+    if(hint){
+      hint.style.left=(e.clientX+16)+"px";
+      hint.style.top=(e.clientY+22)+"px";
+    }
     // ドロップターゲット検出
     ghost.style.display="none";
     const under=document.elementFromPoint(e.clientX,e.clientY);
@@ -897,6 +1058,11 @@ function attachCardDrag(c,p){
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(sec)sec.classList.add("dragover");
       hoverSec=sec;
+      // multi モード時、ヒントを「ドロップ先フロア」に動的更新
+      if(hint&&viewMode==="multi"){
+        const tf=sec?.closest(".multi-col")?.dataset.floor;
+        hint.innerHTML=tf?`<span class="dh-arrow">↳</span> <b>${tf}</b> に配置`:`<span class="dh-arrow">↳</span> ドロップ先フロアへ`;
+      }
     }
   });
   const finish=ok=>{
@@ -906,7 +1072,13 @@ function attachCardDrag(c,p){
         const k=uidEnc(uid(p));
         // 表示上の待機判定 ── layout未設定でマスタ不在のため待機表示中の人も含めて検出
         const wasWait=locOf(p)==="WAIT";
-        if(wasWait && loc!=="WAIT")setFloorMove(k,curFloor);
+        // multi モード時はドロップ先のフロアカラムを参照、single モード時は curFloor
+        const targetFloor=viewMode==="multi"?
+          (hoverSec.closest(".floor-row")?.dataset.floor||floorOf(p)):curFloor;
+        // フロア異動の判定:待機→工程 or 別フロアの工程へのドロップ
+        if(loc!=="WAIT"&&(wasWait||floorOf(p)!==targetFloor)){
+          setFloorMove(k,targetFloor);
+        }
         setLayout(k,loc);render();
       }
       if(hoverSec)hoverSec.classList.remove("dragover");
@@ -914,6 +1086,9 @@ function attachCardDrag(c,p){
       if(hint){hint.remove();hint=null}
       c.classList.remove("dragging");
       document.body.classList.remove("dragging-active");
+    }else if(ok&&viewMode==="multi"){
+      // multi モードで「タップだけ」(=ドラッグせずに離した) → 名前ポップオーバー表示
+      showCardPopover(p,c);
     }
     hoverSec=null;active=false;pid=null;
   };
@@ -1159,7 +1334,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.24";
+const APP_VERSION="2026.05.30.28";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -1185,7 +1360,15 @@ document.addEventListener("wheel",e=>{
   if(e.deltaY<0)zoomIn();else zoomOut();
 },{passive:false});
 // 起動時に保存された倍率を適用
-window.addEventListener("DOMContentLoaded",()=>setTimeout(applyZoom,50));
+window.addEventListener("DOMContentLoaded",()=>{
+  setTimeout(applyZoom,50);
+  // viewMode を復元
+  if(viewMode==="multi"){
+    document.body.classList.add("multi-mode");
+    const btn=document.getElementById("viewToggle");
+    if(btn){btn.classList.add("active");btn.textContent="⏍ 単一"}
+  }
+});
 let curSecPlace="OUT";
 function openSettings(){
   document.getElementById("appVer").textContent=APP_VERSION;
