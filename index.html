@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -308,6 +307,20 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .tp-cell b{font-size:17px;font-weight:800}
 .tp-sub{font-size:9px;color:var(--sub);font-weight:700;margin-left:3px}
 .tp-hint{font-size:10px;color:#cbd5e1;font-style:italic}
+.sumtbl tr.unit-row td{background:#fff4f8;border-top:2px solid #db2777}
+.sumtbl tr.unit-row .secname{color:#db2777;font-weight:800}
+.unit-input{width:74px;padding:3px 6px;border:1px solid #db2777;border-radius:6px;font-size:13px;font-weight:700;text-align:right;font-family:inherit;color:var(--txt);background:#fff;font-variant-numeric:tabular-nums}
+.unit-input:focus{outline:none;box-shadow:0 0 0 2px rgba(219,39,119,.25)}
+.unit-note,.diff-note{font-size:10px;color:var(--sub);text-align:left;font-weight:600}
+.sumtbl tr.diff-row td{background:#f8fafc;border-bottom:2px solid #475569}
+.sumtbl tr.diff-row .secname{color:#475569;font-weight:800}
+.diff-cell{font-variant-numeric:tabular-nums;font-size:15px}
+.diff-cell b{font-size:17px;font-weight:800}
+.diff-sub{font-size:9px;font-weight:700;margin-left:3px}
+.diff-cell.diff-plus{color:#059669}.diff-cell.diff-plus .diff-sub{color:#059669}
+.diff-cell.diff-minus{color:#dc2626}.diff-cell.diff-minus .diff-sub{color:#dc2626}
+.diff-cell.diff-zero{color:#64748b}.diff-cell.diff-zero .diff-sub{color:#64748b}
+.diff-hint{font-size:10px;color:#cbd5e1;font-style:italic}
 /* ===== 印刷用 ===== */
 #printArea{display:none}
 .print-floor{padding:0;width:100%;box-sizing:border-box;margin-bottom:0}
@@ -642,6 +655,7 @@ let curFloor=null;
 let searchQ="";
 let fbInited=false;
 let targetUPH={out:0,in:0};   // OUT/IN のターゲットUPH(全フロア共通・Firebase同期)
+let targetUnit={out:0,in:0};  // OUT/IN のターゲットUNIT数(全フロア共通・Firebase同期)
 
 // ===== Firebase 同期 =====
 function uid(p){return p.no+"_"+p.name}
@@ -766,6 +780,16 @@ function initFirebase(){
     // 入力中の欄は上書きしない(自分の打鍵を妨げない)
     if(oi&&document.activeElement!==oi)oi.value=targetUPH.out||"";
     if(ii&&document.activeElement!==ii)ii.value=targetUPH.in||"";
+    refreshTP();
+    markSummaryStale();
+  });
+  // ターゲットUNIT数(OUT/IN)の同期 ── 全端末で共有
+  fb.onValue(fb.rRef("targetUnit"),snap=>{
+    const t=snap.val();
+    targetUnit=(t&&typeof t==="object")?{out:+t.out||0,in:+t.in||0}:{out:0,in:0};
+    const oi=document.getElementById("unitOut"),ii=document.getElementById("unitIn");
+    if(oi&&document.activeElement!==oi)oi.value=targetUnit.out||"";
+    if(ii&&document.activeElement!==ii)ii.value=targetUnit.in||"";
     refreshTP();
     markSummaryStale();
   });
@@ -1250,6 +1274,20 @@ function openSummary(){
     `<td colspan="2" id="tpIn" class="tp-cell" data-lh="${lhInAll}"></td>`+
     `<td colspan="6" class="tp-formula">OUT: LH ${fmtLH(lhOutAll)} ／ IN: LH ${fmtLH(lhInAll)}</td>`+
     `<td class="admin-col z"></td></tr>`;
+  // ★ ターゲットUNIT数 入力行(OUT列・IN列の下にUNIT入力欄を配置)
+  html+=`<tr class="unit-row">`+
+    `<td class="secname">🎯 ターゲットUNIT</td>`+
+    `<td colspan="2"><input type="number" id="unitOut" class="unit-input" min="0" step="1" placeholder="UNIT" value="${targetUnit.out||''}" oninput="onUnitInput('out',this.value)"></td>`+
+    `<td colspan="2"><input type="number" id="unitIn" class="unit-input" min="0" step="1" placeholder="UNIT" value="${targetUnit.in||''}" oninput="onUnitInput('in',this.value)"></td>`+
+    `<td colspan="6" class="unit-note">処理可能TP − ターゲットUNIT = 差異</td>`+
+    `<td class="admin-col z"></td></tr>`;
+  // ★ 差異 行(処理可能TP − ターゲットUNIT。プラス=余力 / マイナス=不足)
+  html+=`<tr class="diff-row">`+
+    `<td class="secname">± 差異</td>`+
+    `<td colspan="2" id="diffOut" class="diff-cell"></td>`+
+    `<td colspan="2" id="diffIn" class="diff-cell"></td>`+
+    `<td colspan="6" class="diff-note">＋ 余力 ／ − 不足</td>`+
+    `<td class="admin-col z"></td></tr>`;
   html+=`</table></div>`;
 
   // フロアごとの工程別内訳(管理者は別枠で各セクションに併記)
@@ -1312,7 +1350,18 @@ function onUPHInput(which,val){
   refreshTP();
   saveTargetUPH();
 }
+function saveTargetUnit(){
+  if(window.fb)fb.set(fb.rRef("targetUnit"),targetUnit).catch(e=>console.error("saveTargetUnit",e));
+}
+// ターゲットUNIT入力時(OUT/IN) ── 即ローカル反映+差異再計算、Firebaseへ保存
+function onUnitInput(which,val){
+  const n=Math.max(0,parseFloat(val)||0);
+  targetUnit[which]=n;
+  refreshTP();
+  saveTargetUnit();
+}
 // サマリの全フロアOUT/IN LH合計から TP(=LH×UPH)を算出してセル更新
+// あわせて 差異(=処理可能TP − ターゲットUNIT)も更新
 function refreshTP(){
   const cellOut=document.getElementById("tpOut");
   const cellIn=document.getElementById("tpIn");
@@ -1328,6 +1377,24 @@ function refreshTP(){
   cellIn.innerHTML=targetUPH.in>0
     ?`<b>${fmt(tpIn)}</b><span class="tp-sub">TP</span>`
     :`<span class="tp-hint">UPH未入力</span>`;
+  // 差異セル更新(処理可能TP − ターゲットUNIT)
+  const updateDiff=(id,tp,uph,unit)=>{
+    const cell=document.getElementById(id);
+    if(!cell)return;
+    // UPH未入力 or UNIT未入力なら差異は出さない
+    if(!(uph>0)||!(unit>0)){
+      cell.className="diff-cell";
+      cell.innerHTML=`<span class="diff-hint">${uph>0?'UNIT未入力':'UPH未入力'}</span>`;
+      return;
+    }
+    const d=tp-unit;
+    const sign=d>0?"+":(d<0?"−":"±");
+    const cls=d>0?"diff-plus":(d<0?"diff-minus":"diff-zero");
+    cell.className="diff-cell "+cls;
+    cell.innerHTML=`<b>${sign}${fmt(Math.abs(d))}</b><span class="diff-sub">${d>0?'余力':(d<0?'不足':'同数')}</span>`;
+  };
+  updateDiff("diffOut",tpOut,targetUPH.out,targetUnit.out);
+  updateDiff("diffIn",tpIn,targetUPH.in,targetUnit.in);
 }
 
 document.addEventListener("keydown",e=>{
@@ -1643,10 +1710,11 @@ function wipeAll(){
     fb.remove(fb.rRef("floors"));
     fb.remove(fb.rRef("admins"));
     fb.remove(fb.rRef("targetUPH"));
+    fb.remove(fb.rRef("targetUnit"));
   }
   localStorage.removeItem("haichi3_lastCheck");
   localStorage.setItem("haichi3_wiped","1");  // 次回起動時の表示をクリーンに
-  layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={out:0,in:0};
+  layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={out:0,in:0};targetUnit={out:0,in:0};
   alert("削除しました。ページを再読み込みします。");
   location.reload();
 }
@@ -2098,6 +2166,7 @@ function execPaste(){
 // グローバル公開(onclick等から参照)
 window.openSummary=openSummary;window.closeSummary=closeSummary;
 window.onUPHInput=onUPHInput;
+window.onUnitInput=onUnitInput;
 window.openAdd=openAdd;window.closeAdd=closeAdd;window.syncAddSec=syncAddSec;window.submitAdd=submitAdd;window.deleteCustom=deleteCustom;
 window.openSettings=openSettings;window.closeSettings=closeSettings;window.loadAdminFile=loadAdminFile;window.clearAdmins=clearAdmins;
 window.copyDashboardUrl=copyDashboardUrl;window.shareDashboardUrl=shareDashboardUrl;
