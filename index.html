@@ -14,7 +14,8 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;transition:background .25s}
 header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:60;flex-wrap:wrap;box-shadow:0 1px 3px rgba(0,0,0,.04)}
-.app-title{display:inline-flex;align-items:baseline;gap:8px;font-size:15px;letter-spacing:.02em;font-weight:800;margin:0;white-space:nowrap;color:var(--txt)}
+.app-title{display:inline-flex;align-items:center;gap:8px;font-size:15px;letter-spacing:.02em;font-weight:800;margin:0;white-space:nowrap;color:var(--txt)}
+.app-title .brand-logo{height:22px;width:auto;display:block;flex-shrink:0}
 .app-title .meta{font-size:10px;color:var(--sub);font-weight:500}
 .app-title .conn-ind{font-size:11px;font-weight:700}
 .app-title .conn-ind.on{color:#10b981}
@@ -358,14 +359,14 @@ input[type=file]{display:none}
 <body>
 <header>
   <div class="toolbar">
-    <h1 class="app-title">配置ダッシュボード<span class="meta" id="floorMeta"></span><span class="conn-ind off" id="connIndicator" title="クラウド同期状態">●</span></h1>
-    <button class="btn summary" onclick="openSummary()">サマリ</button>
+    <h1 class="app-title"><img class="brand-logo" src="data:image/png;base64,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" alt="Gworker">配置ダッシュボード<span class="meta" id="floorMeta"></span><span class="conn-ind off" id="connIndicator" title="クラウド同期状態">●</span></h1>
     <div class="search-wrap">
       <input class="search" id="search" placeholder="氏名で検索...">
       <button class="search-clear" id="searchClear" onclick="clearSearch()" title="検索終了">×</button>
     </div>
     <div class="ftabs" id="ftabs"></div>
     <button id="viewToggle" class="btn view-toggle" onclick="toggleViewMode()" title="全フロアを横並びで表示">⏍ 全フロア</button>
+    <button class="btn summary" onclick="openSummary()">サマリ</button>
     <div class="tabs">
       <button class="tab active" data-shift="日勤" onclick="setShift('日勤',this)">日勤</button>
       <button class="tab night" data-shift="夜勤" onclick="setShift('夜勤',this)">夜勤</button>
@@ -1486,7 +1487,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.17.1";
+const APP_VERSION="2026.06.17.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
