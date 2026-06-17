@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -294,6 +295,19 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .nm.gw{background:#cffafe;color:#155e75;border-color:#a5f3fc}
 .nm.op{background:#f1f5f9;color:#334155;border-color:#e2e8f0}
 .nm .fk{background:#dc2626;color:#fff;font-size:9px;padding:0 4px;border-radius:3px;margin-left:2px}
+/* ===== ターゲットUPH / 出荷可能TP ===== */
+.sumtbl tr.uph-row td{background:#fffaf2;border-top:2px solid var(--accent)}
+.sumtbl tr.uph-row .secname{color:var(--accent);font-weight:800}
+.uph-input{width:74px;padding:3px 6px;border:1px solid var(--accent);border-radius:6px;font-size:13px;font-weight:700;text-align:right;font-family:inherit;color:var(--txt);background:#fff;font-variant-numeric:tabular-nums}
+.uph-input:focus{outline:none;box-shadow:0 0 0 2px rgba(232,130,12,.25)}
+.uph-unit{font-size:10px;color:var(--sub);font-weight:700}
+.uph-note,.tp-formula{font-size:10px;color:var(--sub);text-align:left;font-weight:600}
+.sumtbl tr.tp-row td{background:#eef6f5;border-bottom:2px solid var(--accent2)}
+.sumtbl tr.tp-row .secname{color:var(--accent2);font-weight:800}
+.tp-cell{font-variant-numeric:tabular-nums;font-size:15px;color:var(--accent2)}
+.tp-cell b{font-size:17px;font-weight:800}
+.tp-sub{font-size:9px;color:var(--sub);font-weight:700;margin-left:3px}
+.tp-hint{font-size:10px;color:#cbd5e1;font-style:italic}
 /* ===== 印刷用 ===== */
 #printArea{display:none}
 .print-floor{padding:0;width:100%;box-sizing:border-box;margin-bottom:0}
@@ -593,7 +607,6 @@ input[type=file]{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-</script>
 <script>
 let DB={people:[],master:{OUT:[],IN:[],ICQA:[]},floors:["6F","5F","4F","3F","2F"]};
 const PLACES=["OUT","IN","ICQA","WAIT"];
@@ -628,6 +641,7 @@ function toggleViewMode(){
 let curFloor=null;
 let searchQ="";
 let fbInited=false;
+let targetUPH={out:0,in:0};   // OUT/IN のターゲットUPH(全フロア共通・Firebase同期)
 
 // ===== Firebase 同期 =====
 function uid(p){return p.no+"_"+p.name}
@@ -742,6 +756,17 @@ function initFirebase(){
     }
     _roleAutoVer=-1;
     render();
+    markSummaryStale();
+  });
+  // ターゲットUPH(OUT/IN)の同期 ── 全端末で共有
+  fb.onValue(fb.rRef("targetUPH"),snap=>{
+    const t=snap.val();
+    targetUPH=(t&&typeof t==="object")?{out:+t.out||0,in:+t.in||0}:{out:0,in:0};
+    const oi=document.getElementById("uphOut"),ii=document.getElementById("uphIn");
+    // 入力中の欄は上書きしない(自分の打鍵を妨げない)
+    if(oi&&document.activeElement!==oi)oi.value=targetUPH.out||"";
+    if(ii&&document.activeElement!==ii)ii.value=targetUPH.in||"";
+    refreshTP();
     markSummaryStale();
   });
   // 接続状態UI更新
@@ -1207,7 +1232,25 @@ function openSummary(){
   });
   const allgrp=pl=>pl==="WAIT"?v.filter(p=>locOf(p)==="WAIT"):v.filter(p=>locOf(p).split("|")[0]===pl);
   const alltds=["OUT","IN","ICQA","WAIT"].map(pl=>{const g=allgrp(pl);return `<td>${g.length}</td><td>${fmtLH(lhSum(g))}</td>`}).join("");
-  html+=`<tr class="rowtot"><td class="secname rowtot">全フロア</td>${alltds}<td>${v.length}</td><td>${fmtLH(lhSum(v))}</td><td class="admin-col">${adminP.length||0}</td></tr></table></div>`;
+  // 全フロア OUT/IN の LH合計を取り出す(TP算出に使用)
+  const lhOutAll=lhSum(allgrp("OUT"));
+  const lhInAll=lhSum(allgrp("IN"));
+  html+=`<tr class="rowtot"><td class="secname rowtot">全フロア</td>${alltds}<td>${v.length}</td><td>${fmtLH(lhSum(v))}</td><td class="admin-col">${adminP.length||0}</td></tr>`;
+  // ★ ターゲットUPH 入力行(OUT列・IN列の下にUPH入力欄を配置)
+  html+=`<tr class="uph-row">`+
+    `<td class="secname">🎯 目標UPH</td>`+
+    `<td colspan="2"><input type="number" id="uphOut" class="uph-input" min="0" step="1" placeholder="UPH" value="${targetUPH.out||''}" oninput="onUPHInput('out',this.value)"> <span class="uph-unit">/h</span></td>`+
+    `<td colspan="2"><input type="number" id="uphIn" class="uph-input" min="0" step="1" placeholder="UPH" value="${targetUPH.in||''}" oninput="onUPHInput('in',this.value)"></td>`+
+    `<td colspan="6" class="uph-note">LH合計 × 目標UPH = 出荷可能TP</td>`+
+    `<td class="admin-col z"></td></tr>`;
+  // ★ 出荷可能TP 行(OUT/INそれぞれ LH×UPH)
+  html+=`<tr class="tp-row">`+
+    `<td class="secname">📦 出荷可能TP</td>`+
+    `<td colspan="2" id="tpOut" class="tp-cell" data-lh="${lhOutAll}"></td>`+
+    `<td colspan="2" id="tpIn" class="tp-cell" data-lh="${lhInAll}"></td>`+
+    `<td colspan="6" class="tp-formula">OUT: LH ${fmtLH(lhOutAll)} ／ IN: LH ${fmtLH(lhInAll)}</td>`+
+    `<td class="admin-col z"></td></tr>`;
+  html+=`</table></div>`;
 
   // フロアごとの工程別内訳(管理者は別枠で各セクションに併記)
   fl.forEach(f=>{
@@ -1253,9 +1296,40 @@ function openSummary(){
     html+=`</div>`;
   });
   body.innerHTML=html;
+  refreshTP();   // モーダル表示時にTPセルを埋める
   document.getElementById("summaryModal").classList.add("open");
 }
 function closeSummary(){document.getElementById("summaryModal").classList.remove("open")}
+
+// ===== ターゲットUPH / 出荷可能TP =====
+function saveTargetUPH(){
+  if(window.fb)fb.set(fb.rRef("targetUPH"),targetUPH).catch(e=>console.error("saveTargetUPH",e));
+}
+// UPH入力時(OUT/IN) ── 即ローカル反映+TP再計算、Firebaseへ保存
+function onUPHInput(which,val){
+  const n=Math.max(0,parseFloat(val)||0);
+  targetUPH[which]=n;
+  refreshTP();
+  saveTargetUPH();
+}
+// サマリの全フロアOUT/IN LH合計から TP(=LH×UPH)を算出してセル更新
+function refreshTP(){
+  const cellOut=document.getElementById("tpOut");
+  const cellIn=document.getElementById("tpIn");
+  if(!cellOut||!cellIn)return;  // サマリ未表示なら何もしない
+  const lhOut=parseFloat(cellOut.dataset.lh||"0")||0;
+  const lhIn=parseFloat(cellIn.dataset.lh||"0")||0;
+  const tpOut=Math.round(lhOut*targetUPH.out);
+  const tpIn=Math.round(lhIn*targetUPH.in);
+  const fmt=n=>n.toLocaleString("ja-JP");
+  cellOut.innerHTML=targetUPH.out>0
+    ?`<b>${fmt(tpOut)}</b><span class="tp-sub">TP</span>`
+    :`<span class="tp-hint">UPH未入力</span>`;
+  cellIn.innerHTML=targetUPH.in>0
+    ?`<b>${fmt(tpIn)}</b><span class="tp-sub">TP</span>`
+    :`<span class="tp-hint">UPH未入力</span>`;
+}
+
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){
     closeSummary();closeSettings();closeAdd();
@@ -1568,10 +1642,11 @@ function wipeAll(){
     fb.remove(fb.rRef("roster"));
     fb.remove(fb.rRef("floors"));
     fb.remove(fb.rRef("admins"));
+    fb.remove(fb.rRef("targetUPH"));
   }
   localStorage.removeItem("haichi3_lastCheck");
   localStorage.setItem("haichi3_wiped","1");  // 次回起動時の表示をクリーンに
-  layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};
+  layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={out:0,in:0};
   alert("削除しました。ページを再読み込みします。");
   location.reload();
 }
@@ -2019,6 +2094,20 @@ function execPaste(){
   closePasteModal();render();
   alert(`${parsed.people.length}名を取り込みました(全端末に反映されます)`);
 }
+
+// グローバル公開(onclick等から参照)
+window.openSummary=openSummary;window.closeSummary=closeSummary;
+window.onUPHInput=onUPHInput;
+window.openAdd=openAdd;window.closeAdd=closeAdd;window.syncAddSec=syncAddSec;window.submitAdd=submitAdd;window.deleteCustom=deleteCustom;
+window.openSettings=openSettings;window.closeSettings=closeSettings;window.loadAdminFile=loadAdminFile;window.clearAdmins=clearAdmins;
+window.copyDashboardUrl=copyDashboardUrl;window.shareDashboardUrl=shareDashboardUrl;
+window.selectSecTab=selectSecTab;window.moveSec=moveSec;window.delSec=delSec;window.addSection=addSection;
+window.updateApp=updateApp;window.wipeAll=wipeAll;window.resetLayout=resetLayout;
+window.setShift=setShift;window.toggleViewMode=toggleViewMode;window.clearSearch=clearSearch;
+window.zoomIn=zoomIn;window.zoomOut=zoomOut;window.zoomReset=zoomReset;
+window.openPasteModal=openPasteModal;window.closePasteModal=closePasteModal;window.previewPaste=previewPaste;window.execPaste=execPaste;
+window.loadFile=loadFile;window.exportPDF=exportPDF;window.printAll=printAll;
+
 render();
 </script>
 </body>
