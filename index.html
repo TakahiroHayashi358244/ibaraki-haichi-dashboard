@@ -542,6 +542,7 @@ input[type=file]{display:none}
         <div class="setting-lbl">バージョン情報</div>
         <div class="setting-info">
           <div>アプリバージョン: <b id="appVer">―</b></div>
+          <div>サーバー最新版: <b id="latestVer">確認中...</b></div>
           <div>最終更新確認: <b id="lastCheck">―</b></div>
           <div>クラウド同期: <b id="connStatus">接続確認中...</b></div>
         </div>
@@ -1485,7 +1486,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.05.30.31";
+const APP_VERSION="2026.06.17.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -1520,6 +1521,19 @@ window.addEventListener("DOMContentLoaded",()=>{
     const btn=document.getElementById("viewToggle");
     if(btn){btn.classList.add("active");btn.textContent="⏍ 単一"}
   }
+  // 「最新版に更新」後の結果通知 ── 期待した版が読み込めたか検証
+  const pending=localStorage.getItem("haichi3_pendingVer");
+  if(pending){
+    localStorage.removeItem("haichi3_pendingVer");
+    setTimeout(()=>{
+      if(pending===APP_VERSION){
+        alert(`更新が完了しました。\n\nバージョン: ${APP_VERSION}`);
+      }else{
+        // クエリ付きでも古い版が返ってきた(CDNキャッシュ等)
+        alert(`更新を試みましたが、まだ反映されていない可能性があります。\n\n期待した版: ${pending}\n現在の版: ${APP_VERSION}\n\n少し時間をおいて再度「最新版に更新」をお試しください。`);
+      }
+    },300);
+  }
 });
 let curSecPlace="OUT";
 function openSettings(){
@@ -1537,6 +1551,30 @@ function openSettings(){
   const adminCntEl=document.getElementById("adminCount");
   if(adminCntEl)adminCntEl.textContent=adminCnt?`現在 ${adminCnt}名 の管理者を登録中`:"管理者未登録";
   document.getElementById("settingsModal").classList.add("open");
+  // サーバー最新版(version.json)を控えめにチェックして表示
+  checkLatestVersion();
+}
+// version.json を取得して「サーバー最新版」表示を更新(失敗しても致命的でない)
+async function checkLatestVersion(){
+  const el=document.getElementById("latestVer");
+  if(el)el.textContent="確認中...";
+  try{
+    const vurl=location.origin+location.pathname.replace(/[^/]*$/,"")+"version.json?t="+Date.now();
+    const res=await fetch(vurl,{cache:"no-store"});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    const remote=await res.json();
+    if(el){
+      if(remote.version===APP_VERSION){
+        el.textContent=remote.version+"(最新)";
+        el.style.color="";
+      }else{
+        el.textContent=remote.version+" ⚠ 更新あり";
+        el.style.color="#dc2626";
+      }
+    }
+  }catch(e){
+    if(el){el.textContent="取得できません";el.style.color="var(--sub)"}
+  }
 }
 function loadAdminFile(ev){
   const f=ev.target.files[0];if(!f)return;
@@ -1691,12 +1729,54 @@ function addSection(){
   renderSecEditList();
   render();
 }
-function updateApp(){
-  if(!confirm("最新版をサーバーから取得して再読み込みします。配置データはそのまま保持されます。よろしいですか?"))return;
+async function updateApp(){
+  const btn=document.querySelector('.setting-item .btn.primary[onclick="updateApp()"]');
+  const orig=btn?btn.textContent:"";
+  const setBtn=(t,dis)=>{if(btn){btn.textContent=t;btn.disabled=!!dis}};
+  setBtn("確認中...",true);
+  // version.json をキャッシュ完全バイパスで取得して新旧比較
+  let remote=null;
+  try{
+    const vurl=location.origin+location.pathname.replace(/[^/]*$/,"")+"version.json?t="+Date.now();
+    const res=await fetch(vurl,{cache:"no-store"});
+    if(res.ok)remote=await res.json();
+  }catch(e){console.warn("version.json取得失敗",e)}
   localStorage.setItem("haichi3_lastCheck",new Date().toLocaleString("ja-JP"));
-  // ブラウザキャッシュをバイパスして再取得
-  const url=location.href.split("?")[0].split("#")[0]+"?v="+Date.now();
-  location.replace(url);
+  const lc=document.getElementById("lastCheck");
+  if(lc)lc.textContent=localStorage.getItem("haichi3_lastCheck");
+
+  // version.json が取れなかった場合 → 強制再取得を確認
+  if(!remote||!remote.version){
+    setBtn(orig,false);
+    if(confirm("バージョン情報を取得できませんでした(ネット未接続か version.json が未配置)。\nそれでも最新ファイルの再取得を試みますか?")){
+      forceReload();
+    }
+    return;
+  }
+
+  // 既に最新の場合
+  if(remote.version===APP_VERSION){
+    setBtn(orig,false);
+    alert(`既に最新版です。\n\nバージョン: ${APP_VERSION}`+(remote.date?`\n公開日: ${remote.date}`:""));
+    return;
+  }
+
+  // 新版あり → 内容を提示して確認
+  setBtn(orig,false);
+  const msg=`新しいバージョンがあります。更新しますか?\n\n`+
+    `現在: ${APP_VERSION}\n`+
+    `最新: ${remote.version}`+(remote.date?` (${remote.date})`:"")+
+    (remote.notes?`\n\n更新内容:\n${remote.notes}`:"")+
+    `\n\n※配置データはそのまま保持されます。`;
+  if(!confirm(msg))return;
+  // 更新後にユーザーへ通知するためのフラグ(取得を期待する版)
+  localStorage.setItem("haichi3_pendingVer",remote.version);
+  forceReload();
+}
+// キャッシュをバイパスして本体を強制再取得
+function forceReload(){
+  const base=location.href.split("?")[0].split("#")[0];
+  location.replace(base+"?v="+Date.now());
 }
 function wipeAll(){
   if(!confirm("クラウドに保存された配置データ・追加メンバー・名簿・管理者・セクション編集をすべて削除します。\n全端末から削除され、復元できません。よろしいですか?"))return;
