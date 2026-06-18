@@ -282,6 +282,7 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .sum-admin-note{background:linear-gradient(135deg,#fef3c7,#fde68a);color:#92400e;padding:7px 12px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:12px;border:1px solid #f59e0b}
 .admin-col{background:#fef3c7;color:#92400e;font-weight:700;text-align:center;font-size:11px}
 .adm-tot{display:inline-block;margin-left:10px;padding:2px 8px;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;border-radius:10px;font-size:11px;font-weight:700}
+.adm-off{display:inline-block;margin-left:8px;padding:2px 8px;background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;border-radius:10px;font-size:11px;font-weight:700}
 .adm-add{display:inline-block;margin-left:3px;color:#d97706;font-size:10px;font-weight:700}
 .adm-only{color:#d97706;font-weight:700}
 .nm-admin{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:11px;margin:1px 3px 1px 0;background:#fef3c7;color:#92400e;border:1px solid #f59e0b;white-space:nowrap}
@@ -1188,15 +1189,18 @@ function renderHitbar(){
 }
 function renderStats(v){
   const allOnFloor=v;
-  const adminN=v.filter(p=>p.admin).length;
+  // 管理者: 待機中(=休日)はカウントしない。稼働中の管理者のみ管理者数に計上
+  const adminActive=v.filter(p=>p.admin && locOf(p)!=="WAIT").length;
+  const adminOff=v.filter(p=>p.admin && locOf(p)==="WAIT").length;  // 休日(待機)管理者
   v=v.filter(p=>!p.admin);  // 集計対象は管理者除外
   const fork=v.filter(p=>p.fork).length;
   const wait=v.filter(p=>locOf(p)==="WAIT").length;
   const allWait=DB.people.filter(p=>p.shift===curShift && !p.admin && locOf(p)==="WAIT").length;
   const bp=pl=>v.filter(p=>locOf(p).split("|")[0]===pl).length;
-  const adminTag=adminN?` <span style="color:#d97706;font-weight:700">👑 管理者 ${adminN}名</span>`:'';
+  const adminTag=adminActive?` <span style="color:#d97706;font-weight:700">👑 管理者 ${adminActive}名</span>`:'';
+  const adminOffTag=adminOff?` <span style="color:#94a3b8;font-weight:600">(休日 ${adminOff}名)</span>`:'';
   document.getElementById("stats").innerHTML=
-    `<span><b>${curShift}・${curFloor}</b> 実稼働<b>${v.length}</b>名${adminTag}</span>`+
+    `<span><b>${curShift}・${curFloor}</b> 実稼働<b>${v.length}</b>名${adminTag}${adminOffTag}</span>`+
     `<span>稼働 <b>${v.length-wait}</b>名</span>`+
     `<span>OUT <b>${bp('OUT')}</b> / IN <b>${bp('IN')}</b> / ICQA <b>${bp('ICQA')}</b></span>`+
     `<span>フォーク <b>${fork}</b>名</span><span>待機/欠勤(全体) <b>${allWait}</b>名</span>`;
@@ -1231,7 +1235,9 @@ function openSummary(){
   // 集計対象から管理者を完全除外(HC・LH両方)
   const all=DB.people.filter(p=>p.shift===curShift);
   const v=all.filter(p=>!p.admin);
-  const adminP=all.filter(p=>p.admin);
+  // 管理者: 待機中(=休日)はカウントしない。稼働中(非WAIT)のみ管理者列に計上
+  const adminP=all.filter(p=>p.admin && locOf(p)!=="WAIT");   // 稼働中の管理者
+  const adminOff=all.filter(p=>p.admin && locOf(p)==="WAIT"); // 休日(待機)の管理者
   const fl=DB.floors.filter(f=>all.some(p=>floorOf(p)===f));
   document.getElementById("summaryTitle").textContent=`配置サマリ(${curShift})`;
   const body=document.getElementById("summaryBody");
@@ -1240,8 +1246,10 @@ function openSummary(){
   const fmtLH=n=>(Math.round(n*10)/10).toString().replace(/\.0$/,"");
   let html="";
   // 管理者の注釈
-  if(adminP.length){
-    html+=`<div class="sum-admin-note">👑 管理者 ${adminP.length}名 は HC(人数)・LH 集計から除外し、別枠で表示しています</div>`;
+  if(adminP.length||adminOff.length){
+    html+=`<div class="sum-admin-note">👑 管理者 ${adminP.length}名 は HC(人数)・LH 集計から除外し、別枠で表示しています`+
+      (adminOff.length?` ／ <span style="font-weight:800">待機中の管理者 ${adminOff.length}名 は休日として管理者カウントから除外</span>`:'')+
+      `</div>`;
   }
   // 全フロア合計の早見表 ── 「管理者」列を追加
   html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">実稼働 合計</th><th class="admin-col" rowspan="2">👑<br>管理者</th></tr><tr><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th class="rowtot">HC</th><th class="rowtot">LH</th></tr>`;
@@ -1292,12 +1300,13 @@ function openSummary(){
     `<td class="admin-col z"></td></tr>`;
   html+=`</table></div>`;
 
-  // フロアごとの工程別内訳(管理者は別枠で各セクションに併記)
+  // フロアごとの工程別内訳(管理者は別枠で各セクションに併記。待機中の管理者=休日は別表示)
   fl.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
     const fa=adminP.filter(p=>floorOf(p)===f);
+    const foff=adminOff.filter(p=>floorOf(p)===f);  // このフロアの休日(待機)管理者
     const h=floorHue(f);
-    html+=`<div class="sumblock"><h3><span class="ft" style="background:hsl(${h},60%,46%)">${f}</span><span class="tot">実稼働 ${fp.length}名 / LH ${fmtLH(lhSum(fp))}</span>${fa.length?`<span class="adm-tot">👑 管理者 ${fa.length}名</span>`:''}</h3>`;
+    html+=`<div class="sumblock"><h3><span class="ft" style="background:hsl(${h},60%,46%)">${f}</span><span class="tot">実稼働 ${fp.length}名 / LH ${fmtLH(lhSum(fp))}</span>${fa.length?`<span class="adm-tot">👑 管理者 ${fa.length}名</span>`:''}${foff.length?`<span class="adm-off">🏠 休日 ${foff.length}名</span>`:''}</h3>`;
     ["OUT","IN","ICQA"].forEach(pl=>{
       const subs=DB.master[pl];
       const plGrp=fp.filter(p=>locOf(p).split("|")[0]===pl);
@@ -1487,7 +1496,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.17.2";
+const APP_VERSION="2026.06.17.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
