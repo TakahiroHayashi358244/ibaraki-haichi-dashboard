@@ -1253,6 +1253,7 @@ function openSummary(){
   html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">実稼働 合計</th><th class="admin-col" rowspan="2">👑<br>管理者</th></tr><tr><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th class="rowtot">HC</th><th class="rowtot">LH</th></tr>`;
   DB.floors.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
+    const fpAct=fp.filter(p=>locOf(p)!=="WAIT");  // 稼働者のみ(待機/欠勤を除外)
     const fa=adminP.filter(p=>floorOf(p)===f);
     const grp=pl=>pl==="WAIT"?fp.filter(p=>locOf(p)==="WAIT"):fp.filter(p=>locOf(p).split("|")[0]===pl);
     const h=floorHue(f);
@@ -1260,14 +1261,15 @@ function openSummary(){
     const tds=["OUT","IN","ICQA","WAIT"].map(pl=>{
       const g=grp(pl);return `<td class="${g.length?'has':'z'}">${g.length}</td><td class="${g.length?'lh':'z'}">${g.length?fmtLH(lhSum(g)):0}</td>`;
     }).join("");
-    html+=`<tr${empty?' class="emptyrow"':''}><td class="secname" style="border-left:5px solid hsl(${h},60%,50%)">${f}</td>${tds}<td class="rowtot">${fp.length}</td><td class="rowtot">${empty?0:fmtLH(lhSum(fp))}</td><td class="admin-col">${fa.length||'<span class="z">0</span>'}</td></tr>`;
+    html+=`<tr${empty?' class="emptyrow"':''}><td class="secname" style="border-left:5px solid hsl(${h},60%,50%)">${f}</td>${tds}<td class="rowtot">${fpAct.length}</td><td class="rowtot">${fpAct.length?fmtLH(lhSum(fpAct)):0}</td><td class="admin-col">${fa.length||'<span class="z">0</span>'}</td></tr>`;
   });
   const allgrp=pl=>pl==="WAIT"?v.filter(p=>locOf(p)==="WAIT"):v.filter(p=>locOf(p).split("|")[0]===pl);
+  const vAct=v.filter(p=>locOf(p)!=="WAIT");  // 全フロアの稼働者のみ(待機/欠勤を除外)
   const alltds=["OUT","IN","ICQA","WAIT"].map(pl=>{const g=allgrp(pl);return `<td>${g.length}</td><td>${fmtLH(lhSum(g))}</td>`}).join("");
   // 全フロア OUT/IN の LH合計を取り出す(TP算出に使用)
   const lhOutAll=lhSum(allgrp("OUT"));
   const lhInAll=lhSum(allgrp("IN"));
-  html+=`<tr class="rowtot"><td class="secname rowtot">全フロア</td>${alltds}<td>${v.length}</td><td>${fmtLH(lhSum(v))}</td><td class="admin-col">${adminP.length||0}</td></tr>`;
+  html+=`<tr class="rowtot"><td class="secname rowtot">全フロア</td>${alltds}<td>${vAct.length}</td><td>${fmtLH(lhSum(vAct))}</td><td class="admin-col">${adminP.length||0}</td></tr>`;
   // ★ ターゲットUPH 入力行(OUT列・IN列の下にUPH入力欄を配置)
   html+=`<tr class="uph-row">`+
     `<td class="secname">🎯 目標UPH</td>`+
@@ -1301,10 +1303,11 @@ function openSummary(){
   // フロアごとの工程別内訳(管理者は別枠で各セクションに併記。待機中の管理者=休日は別表示)
   fl.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
+    const fpAct=fp.filter(p=>locOf(p)!=="WAIT");  // 稼働者のみ(待機/欠勤を除外)
     const fa=adminP.filter(p=>floorOf(p)===f);
     const foff=adminOff.filter(p=>floorOf(p)===f);  // このフロアの休日(待機)管理者
     const h=floorHue(f);
-    html+=`<div class="sumblock"><h3><span class="ft" style="background:hsl(${h},60%,46%)">${f}</span><span class="tot">実稼働 ${fp.length}名 / LH ${fmtLH(lhSum(fp))}</span>${fa.length?`<span class="adm-tot">👑 管理者 ${fa.length}名</span>`:''}${foff.length?`<span class="adm-off">🏠 休日 ${foff.length}名</span>`:''}</h3>`;
+    html+=`<div class="sumblock"><h3><span class="ft" style="background:hsl(${h},60%,46%)">${f}</span><span class="tot">実稼働 ${fpAct.length}名 / LH ${fmtLH(lhSum(fpAct))}</span>${fa.length?`<span class="adm-tot">👑 管理者 ${fa.length}名</span>`:''}${foff.length?`<span class="adm-off">🏠 休日 ${foff.length}名</span>`:''}</h3>`;
     ["OUT","IN","ICQA"].forEach(pl=>{
       const subs=DB.master[pl];
       const plGrp=fp.filter(p=>locOf(p).split("|")[0]===pl);
@@ -1504,7 +1507,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.22.1";
+const APP_VERSION="2026.06.22.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
