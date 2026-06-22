@@ -421,11 +421,9 @@ input[type=file]{display:none}
         </div>
         <div class="frm-row two">
           <div>
-            <label>職責</label>
-            <select id="addRole">
-              <option>Gworker</option><option>Operator</option><option>Reader</option>
-              <option>Manager</option><option>Supervisor</option><option>Observer</option>
-            </select>
+            <label>会社名</label>
+            <input type="text" id="addRole" list="companyList" placeholder="会社名を入力 / 選択" maxlength="30" autocomplete="off">
+            <datalist id="companyList"></datalist>
           </div>
           <div>
             <label>時間帯</label>
@@ -1420,10 +1418,20 @@ function openAdd(){
   // 階層セレクタを更新
   const fs=document.getElementById("addFloor");fs.innerHTML="";
   DB.floors.forEach(f=>{const o=document.createElement("option");o.value=f;o.textContent=f;if(f===(curFloor||"4F"))o.selected=true;fs.appendChild(o)});
+  // 会社名の候補(datalist)を生成 ── 名簿読込(roster)由来の会社名のみ
+  // ※手動「+追加」(custom)や管理者(admin)由来は候補に出さない
+  const dl=document.getElementById("companyList");
+  if(dl){
+    const fromRoster=[...new Set(
+      DB.people.filter(p=>!p.custom&&!p.admin).map(p=>p.role).filter(Boolean)
+    )];
+    dl.innerHTML=fromRoster.map(c=>`<option value="${c.replace(/"/g,'&quot;')}">`).join("");
+  }
   // 配置に応じたセクションを初期化
   syncAddSec();
   // フォーム初期化
   document.getElementById("addName").value="";
+  document.getElementById("addRole").value="";
   document.getElementById("addFork").checked=false;
   document.getElementById("addLH").value=8;
   document.getElementById("addShift").value=curShift;
@@ -1442,7 +1450,7 @@ function syncAddSec(){
 function submitAdd(){
   const name=document.getElementById("addName").value.trim();
   if(!name){alert("氏名を入力してください");return}
-  const role=document.getElementById("addRole").value;
+  const role=document.getElementById("addRole").value.trim();
   const shift=document.getElementById("addShift").value;
   const floor=document.getElementById("addFloor").value;
   const place=document.getElementById("addPlace").value;
@@ -1496,7 +1504,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.17.3";
+const APP_VERSION="2026.06.22.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
