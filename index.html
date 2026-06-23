@@ -127,7 +127,7 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .miro-fchk:hover{border-color:#7c3aed}
 .miro-fchk.on{background:#7c3aed;color:#fff;border-color:#7c3aed}
 .miro-fchk input{display:none}
-.miro-out{width:100%;height:240px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,Menlo,monospace;font-size:12px;background:var(--panel);color:var(--txt);box-sizing:border-box;resize:vertical;white-space:pre;overflow:auto}
+.miro-out{width:100%;height:240px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,Menlo,monospace;font-size:12px;background:var(--panel);color:var(--txt);box-sizing:border-box;resize:vertical;white-space:pre-wrap;word-break:break-all;overflow:auto}
 .miro-out:focus{outline:none;border-color:var(--accent)}
 .miro-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px}
 .miro-stat{margin-right:auto;font-size:12px;color:var(--sub);font-weight:600}
@@ -528,7 +528,7 @@ input[type=file]{display:none}
     </div>
     <div class="modal-body">
       <div class="miro-help">
-        <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付け、「<b>付箋</b>」を選んでください。「■」で始まる行がセクション見出し、その下が配置メンバーです（縦一列に並びます）。</p>
+        <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付け、「<b>付箋</b>」を選んでください。全員が1枚ずつの付箋になって横一列に並びます（配置順）。</p>
       </div>
       <div class="miro-opts">
         <div class="miro-opt-group" style="flex:1">
@@ -1446,35 +1446,26 @@ function buildMiroData(){
   }
   // 当該シフト・対象フロアの稼働者(管理者は除外。待機は配置検討に必要なので含める)
   const people=DB.people.filter(p=>p.shift===curShift && !p.admin && floors.includes(floorOf(p)));
-  // 列定義: {label, members[]}
-  const cols=[];
+  // 配置順(フロア→OUT→IN→ICQA→待機→セクション)に名前を集める
+  const names=[];
   floors.forEach(f=>{
     ["OUT","IN","ICQA"].forEach(pl=>{
       (DB.master[pl]||[]).forEach(s=>{
-        const mem=people.filter(p=>floorOf(p)===f && locOf(p)===pl+"|"+s).sort(sortPeople);
-        if(mem.length)cols.push({floor:f,label:`${f} ${pl}/${s}`,members:mem});
+        people.filter(p=>floorOf(p)===f && locOf(p)===pl+"|"+s).sort(sortPeople)
+          .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
       });
     });
-    const wait=people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople);
-    if(wait.length)cols.push({floor:f,label:`${f} 待機/欠勤`,members:wait});
+    people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople)
+      .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
   });
-  if(!cols.length){
+  if(!names.length){
     ta.value="(該当する配置データがありません)";
     if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / 0名`;
     return;
   }
-  // 縦並び: 各行1セル(タブなし)。見出し→メンバーの順に縦に並べる。
-  // 全行がタブを含まない=列数1で揃うため、Miroが縦一列の付箋として確実に認識し、空白付箋も出ない。
-  const lines=[];
-  cols.forEach(c=>{
-    // セクション見出し(■で区切りを明示)
-    lines.push(`■ ${c.label}`);
-    // メンバー(フロア併記、フォークは[F])
-    c.members.forEach(p=>{
-      lines.push(`${p.name} (${c.floor})`+(p.fork?" [F]":""));
-    });
-  });
-  ta.value=lines.join("\n");
+  // 全員を1行にタブ区切りで並べる ── Miroはタブ区切りを表と認識し、横一列の付箋にする。
+  // 空セルが一切無いので空白付箋は出ず、付箋化も確実に成立する。
+  ta.value=names.join("\t");
   if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / ${people.length}名`;
 }
 function copyMiroData(){
@@ -1653,7 +1644,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.23.3";
+const APP_VERSION="2026.06.23.4";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
