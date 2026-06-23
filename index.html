@@ -112,6 +112,20 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .paste-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
 .btn.summary{background:#7c3aed;color:#fff;border-color:#7c3aed;font-weight:800;box-shadow:0 2px 6px rgba(124,58,237,.25)}
 .btn.summary:hover{background:#6d28d9;color:#fff;border-color:#6d28d9}
+.btn.miro{background:#ffd02f;color:#050038;border-color:#ffd02f;font-weight:800}
+.btn.miro:hover{background:#f5c400;color:#050038;border-color:#f5c400}
+.miro-help{font-size:12px;color:var(--sub);background:var(--panel2);padding:10px 12px;border-radius:8px;margin-bottom:14px;line-height:1.6}
+.miro-help b{color:var(--txt)}
+.miro-opts{display:flex;gap:20px;margin-bottom:12px;flex-wrap:wrap}
+.miro-opt-group{display:flex;flex-direction:column;gap:5px}
+.miro-opt-lbl{font-size:11px;font-weight:800;color:var(--sub)}
+.miro-seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px}
+.miro-seg-btn{padding:6px 13px;border-radius:6px;border:none;background:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--sub);cursor:pointer;transition:.15s}
+.miro-seg-btn.active{background:#7c3aed;color:#fff}
+.miro-out{width:100%;height:240px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,Menlo,monospace;font-size:12px;background:var(--panel);color:var(--txt);box-sizing:border-box;resize:vertical;white-space:pre;overflow:auto}
+.miro-out:focus{outline:none;border-color:var(--accent)}
+.miro-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px}
+.miro-stat{margin-right:auto;font-size:12px;color:var(--sub);font-weight:600}
 .frm{display:flex;flex-direction:column;gap:12px}
 .frm-row{display:flex;flex-direction:column;gap:5px}
 .frm-row.two{flex-direction:row;gap:12px}
@@ -377,6 +391,7 @@ input[type=file]{display:none}
     <button class="btn paste" onclick="openPasteModal()" title="シフト表をコピペで取込">📋 コピペ取込</button>
     <button class="btn add" onclick="openAdd()">+ 追加</button>
     <button class="btn" onclick="resetLayout()">配置リセット</button>
+    <button class="btn miro" onclick="openMiroExport()" title="Miro用に付箋データをコピー">Miro出力</button>
     <button class="btn pdf" onclick="exportPDF()">PDF出力</button>
     <button class="btn primary" onclick="printAll()">印刷</button>
     <div class="zoom-ctrl" title="表示の拡大縮小">
@@ -497,6 +512,42 @@ input[type=file]{display:none}
         <button class="btn" onclick="closePasteModal()">キャンセル</button>
         <button class="btn" onclick="previewPaste()">プレビュー</button>
         <button class="btn primary" onclick="execPaste()">取込実行</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="miroModal" onclick="if(event.target===this)closeMiroExport()">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head">
+      <h2>Miro用エクスポート</h2>
+      <button class="modal-x" onclick="closeMiroExport()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="miro-help">
+        <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付けてください。貼り付け時に「<b>付箋</b>」を選ぶと、1セルが1枚の付箋になります。</p>
+      </div>
+      <div class="miro-opts">
+        <div class="miro-opt-group">
+          <label class="miro-opt-lbl">範囲</label>
+          <div class="miro-seg" id="miroScope">
+            <button class="miro-seg-btn active" data-v="floor" onclick="setMiroOpt('scope','floor',this)">現在のフロアのみ</button>
+            <button class="miro-seg-btn" data-v="all" onclick="setMiroOpt('scope','all',this)">全フロア</button>
+          </div>
+        </div>
+        <div class="miro-opt-group">
+          <label class="miro-opt-lbl">並べ方</label>
+          <div class="miro-seg" id="miroLayout">
+            <button class="miro-seg-btn active" data-v="grid" onclick="setMiroOpt('layout','grid',this)">セクション×人名の格子</button>
+            <button class="miro-seg-btn" data-v="list" onclick="setMiroOpt('layout','list',this)">1行1人の一覧</button>
+          </div>
+        </div>
+      </div>
+      <textarea id="miroOut" class="miro-out" readonly placeholder="ここにデータが表示されます"></textarea>
+      <div class="miro-actions">
+        <span class="miro-stat" id="miroStat"></span>
+        <button class="btn" onclick="closeMiroExport()">閉じる</button>
+        <button class="btn primary" onclick="copyMiroData()">📋 コピー</button>
       </div>
     </div>
   </div>
@@ -1351,6 +1402,127 @@ function openSummary(){
 }
 function closeSummary(){document.getElementById("summaryModal").classList.remove("open")}
 
+// ===== Miro用エクスポート =====
+let miroOpt={scope:"floor",layout:"grid"};
+function openMiroExport(){
+  // 初期値: 単一フロア表示なら現フロア、全フロア表示なら全フロア
+  miroOpt.scope=(viewMode==="multi")?"all":"floor";
+  miroOpt.layout="grid";
+  // セグメントボタンのactive状態を初期化
+  document.querySelectorAll("#miroScope .miro-seg-btn").forEach(b=>b.classList.toggle("active",b.dataset.v===miroOpt.scope));
+  document.querySelectorAll("#miroLayout .miro-seg-btn").forEach(b=>b.classList.toggle("active",b.dataset.v===miroOpt.layout));
+  buildMiroData();
+  document.getElementById("miroModal").classList.add("open");
+}
+function closeMiroExport(){document.getElementById("miroModal").classList.remove("open")}
+function setMiroOpt(key,val,el){
+  miroOpt[key]=val;
+  const grp=el.closest(".miro-seg");
+  grp.querySelectorAll(".miro-seg-btn").forEach(b=>b.classList.remove("active"));
+  el.classList.add("active");
+  buildMiroData();
+}
+// 対象フロアの一覧を返す(範囲オプションに応じて)
+function miroTargetFloors(){
+  if(miroOpt.scope==="all")return DB.floors.slice();
+  return [curFloor];
+}
+// Miro貼付用データ(TSV)を生成
+function buildMiroData(){
+  const floors=miroTargetFloors();
+  // 当該シフト・対象フロアの稼働者(管理者は除外。待機は含める=配置検討に必要)
+  const inScope=p=>p.shift===curShift && !p.admin && floors.includes(floorOf(p));
+  const people=DB.people.filter(inScope);
+  let txt="";
+  if(miroOpt.layout==="list"){
+    txt=buildMiroList(people,floors);
+  }else{
+    txt=buildMiroGrid(people,floors);
+  }
+  const ta=document.getElementById("miroOut");
+  ta.value=txt;
+  const stat=document.getElementById("miroStat");
+  if(stat){
+    const n=people.length;
+    const fl=floors.length;
+    stat.textContent=`${curShift} / ${miroOpt.scope==="all"?`全${fl}フロア`:curFloor} / ${n}名`;
+  }
+}
+// 1行1人の一覧(タブ区切り: フロア / 配置 / セクション / 会社名 / 氏名 / LH / F)
+function buildMiroList(people,floors){
+  const head=["フロア","配置","セクション","会社名","氏名","LH","フォーク"].join("\t");
+  const rows=[head];
+  // フロア→配置→セクション順にソート
+  const placeOrder={OUT:0,IN:1,ICQA:2,WAIT:3};
+  const sorted=people.slice().sort((a,b)=>{
+    const fa=floors.indexOf(floorOf(a)),fb=floors.indexOf(floorOf(b));
+    if(fa!==fb)return fa-fb;
+    const la=locOf(a),lb=locOf(b);
+    const pa=la==="WAIT"?"WAIT":la.split("|")[0];
+    const pb=lb==="WAIT"?"WAIT":lb.split("|")[0];
+    if(placeOrder[pa]!==placeOrder[pb])return (placeOrder[pa]??9)-(placeOrder[pb]??9);
+    return sortPeople(a,b);
+  });
+  sorted.forEach(p=>{
+    const loc=locOf(p);
+    const place=loc==="WAIT"?"待機/欠勤":loc.split("|")[0];
+    const sec=loc==="WAIT"?"":loc.split("|")[1]||"";
+    rows.push([floorOf(p),place,sec,p.role||"",p.name||"",p.lh||"",p.fork?"F":""].join("\t"));
+  });
+  return rows.join("\n");
+}
+// セクション×人名の格子(配置図風)
+// 列=各フロアの各配置/セクション、行=その中の人名を縦に。複数フロアは続けて列展開
+function buildMiroGrid(people,floors){
+  // 列定義を作る: {floor, place, sec, label, members[]}
+  const cols=[];
+  floors.forEach(f=>{
+    ["OUT","IN","ICQA"].forEach(pl=>{
+      (DB.master[pl]||[]).forEach(s=>{
+        const mem=people.filter(p=>floorOf(p)===f && locOf(p)===pl+"|"+s).sort(sortPeople);
+        if(mem.length)cols.push({label:`${f} ${pl}/${s}`,members:mem});
+      });
+    });
+    // 待機/欠勤
+    const wait=people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople);
+    if(wait.length)cols.push({label:`${f} 待機/欠勤`,members:wait});
+  });
+  if(!cols.length)return "(該当する配置データがありません)";
+  // 行数=最大メンバー数+1(ヘッダー)
+  const maxRows=Math.max(...cols.map(c=>c.members.length));
+  const lines=[];
+  // ヘッダー行(各列のラベル)
+  lines.push(cols.map(c=>c.label).join("\t"));
+  // 各行: 列ごとに i番目のメンバー名(なければ空)
+  for(let i=0;i<maxRows;i++){
+    lines.push(cols.map(c=>{
+      const p=c.members[i];
+      if(!p)return "";
+      return p.name+(p.fork?" [F]":"");
+    }).join("\t"));
+  }
+  return lines.join("\n");
+}
+function copyMiroData(){
+  const ta=document.getElementById("miroOut");
+  const txt=ta.value;
+  if(!txt){alert("コピーするデータがありません");return}
+  const done=()=>{
+    const stat=document.getElementById("miroStat");
+    if(stat){const o=stat.textContent;stat.textContent="✓ コピーしました";setTimeout(()=>stat.textContent=o,1800)}
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(()=>{
+      ta.select();ta.setSelectionRange(0,99999);
+      try{document.execCommand("copy");done()}catch(e){alert("コピーできませんでした。手動で選択してコピーしてください")}
+    });
+  }else{
+    ta.select();ta.setSelectionRange(0,99999);
+    try{document.execCommand("copy");done()}catch(e){alert("コピーできませんでした。手動で選択してコピーしてください")}
+  }
+}
+
+
 // ===== ターゲットUPH / 出荷可能TP =====
 function saveTargetUPH(){
   if(window.fb)fb.set(fb.rRef("targetUPH"),targetUPH).catch(e=>console.error("saveTargetUPH",e));
@@ -1411,7 +1583,7 @@ function refreshTP(){
 
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){
-    closeSummary();closeSettings();closeAdd();
+    closeSummary();closeSettings();closeAdd();closeMiroExport();closePasteModal();
     if(searchQ)clearSearch();
   }
 });
@@ -1507,7 +1679,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.22.2";
+const APP_VERSION="2026.06.22.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -2266,6 +2438,7 @@ function execPaste(){
 
 // グローバル公開(onclick等から参照)
 window.openSummary=openSummary;window.closeSummary=closeSummary;
+window.openMiroExport=openMiroExport;window.closeMiroExport=closeMiroExport;window.setMiroOpt=setMiroOpt;window.copyMiroData=copyMiroData;
 window.onUPHInput=onUPHInput;
 window.onUnitInput=onUnitInput;
 window.openAdd=openAdd;window.closeAdd=closeAdd;window.syncAddSec=syncAddSec;window.submitAdd=submitAdd;window.deleteCustom=deleteCustom;
