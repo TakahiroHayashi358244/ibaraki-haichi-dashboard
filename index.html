@@ -395,10 +395,8 @@ input[type=file]{display:none}
     <input type="file" id="file" accept=".xlsx" onchange="loadFile(event)">
     <button class="btn paste" onclick="openPasteModal()" title="シフト表をコピペで取込">📋 コピペ取込</button>
     <button class="btn add" onclick="openAdd()">+ 追加</button>
-    <button class="btn" onclick="resetLayout()">配置リセット</button>
     <button class="btn miro" onclick="openMiroExport()" title="Miro用に付箋データをコピー">Miro出力</button>
     <button class="btn pdf" onclick="exportPDF()">PDF出力</button>
-    <button class="btn primary" onclick="printAll()">印刷</button>
     <div class="zoom-ctrl" title="表示の拡大縮小">
       <button class="zb" onclick="zoomOut()" title="縮小">−</button>
       <span class="zpct" id="zoomPct" onclick="zoomReset()" title="クリックで100%に戻す">100%</span>
@@ -606,6 +604,11 @@ input[type=file]{display:none}
           <input type="text" id="secAddInput" placeholder="新しいセクション名" maxlength="20" onkeydown="if(event.key==='Enter')addSection()">
           <button class="btn add" onclick="addSection()">+ 追加</button>
         </div>
+      </div>
+      <div class="setting-item">
+        <div class="setting-lbl">配置図を印刷</div>
+        <div class="setting-desc">現在のシフトの配置図をフロアごとに印刷します(PDF出力はヘッダーのボタンからも可能)。</div>
+        <button class="btn primary" onclick="closeSettings();printAll()">印刷する</button>
       </div>
       <div class="setting-item">
         <div class="setting-lbl">配置データの初期化</div>
@@ -1659,7 +1662,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.23.1";
+const APP_VERSION="2026.06.23.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
