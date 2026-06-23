@@ -122,6 +122,11 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .miro-seg{display:inline-flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px}
 .miro-seg-btn{padding:6px 13px;border-radius:6px;border:none;background:none;font-family:inherit;font-size:12px;font-weight:700;color:var(--sub);cursor:pointer;transition:.15s}
 .miro-seg-btn.active{background:#7c3aed;color:#fff}
+.miro-floors{display:flex;gap:6px;flex-wrap:wrap}
+.miro-fchk{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);cursor:pointer;font-size:13px;font-weight:700;color:var(--sub);transition:.15s;user-select:none}
+.miro-fchk:hover{border-color:#7c3aed}
+.miro-fchk.on{background:#7c3aed;color:#fff;border-color:#7c3aed}
+.miro-fchk input{display:none}
 .miro-out{width:100%;height:240px;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:Consolas,Menlo,monospace;font-size:12px;background:var(--panel);color:var(--txt);box-sizing:border-box;resize:vertical;white-space:pre;overflow:auto}
 .miro-out:focus{outline:none;border-color:var(--accent)}
 .miro-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-top:12px}
@@ -528,19 +533,9 @@ input[type=file]{display:none}
         <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付けてください。貼り付け時に「<b>付箋</b>」を選ぶと、1セルが1枚の付箋になります。</p>
       </div>
       <div class="miro-opts">
-        <div class="miro-opt-group">
-          <label class="miro-opt-lbl">範囲</label>
-          <div class="miro-seg" id="miroScope">
-            <button class="miro-seg-btn active" data-v="floor" onclick="setMiroOpt('scope','floor',this)">現在のフロアのみ</button>
-            <button class="miro-seg-btn" data-v="all" onclick="setMiroOpt('scope','all',this)">全フロア</button>
-          </div>
-        </div>
-        <div class="miro-opt-group">
-          <label class="miro-opt-lbl">並べ方</label>
-          <div class="miro-seg" id="miroLayout">
-            <button class="miro-seg-btn active" data-v="grid" onclick="setMiroOpt('layout','grid',this)">セクション×人名の格子</button>
-            <button class="miro-seg-btn" data-v="list" onclick="setMiroOpt('layout','list',this)">1行1人の一覧</button>
-          </div>
+        <div class="miro-opt-group" style="flex:1">
+          <label class="miro-opt-lbl">対象フロア（複数選択可）</label>
+          <div class="miro-floors" id="miroFloors"></div>
         </div>
       </div>
       <textarea id="miroOut" class="miro-out" readonly placeholder="ここにデータが表示されます"></textarea>
@@ -1403,105 +1398,90 @@ function openSummary(){
 function closeSummary(){document.getElementById("summaryModal").classList.remove("open")}
 
 // ===== Miro用エクスポート =====
-let miroOpt={scope:"floor",layout:"grid"};
+let miroFloorSel=[];  // 選択中のフロア配列
 function openMiroExport(){
-  // 初期値: 単一フロア表示なら現フロア、全フロア表示なら全フロア
-  miroOpt.scope=(viewMode==="multi")?"all":"floor";
-  miroOpt.layout="grid";
-  // セグメントボタンのactive状態を初期化
-  document.querySelectorAll("#miroScope .miro-seg-btn").forEach(b=>b.classList.toggle("active",b.dataset.v===miroOpt.scope));
-  document.querySelectorAll("#miroLayout .miro-seg-btn").forEach(b=>b.classList.toggle("active",b.dataset.v===miroOpt.layout));
+  // 初期選択: 単一表示なら現フロア、全フロア表示なら全フロア
+  miroFloorSel=(viewMode==="multi")?DB.floors.slice():[curFloor];
+  renderMiroFloors();
   buildMiroData();
   document.getElementById("miroModal").classList.add("open");
 }
 function closeMiroExport(){document.getElementById("miroModal").classList.remove("open")}
-function setMiroOpt(key,val,el){
-  miroOpt[key]=val;
-  const grp=el.closest(".miro-seg");
-  grp.querySelectorAll(".miro-seg-btn").forEach(b=>b.classList.remove("active"));
-  el.classList.add("active");
-  buildMiroData();
+// フロア選択チェックを描画
+function renderMiroFloors(){
+  const box=document.getElementById("miroFloors");
+  if(!box)return;
+  box.innerHTML="";
+  DB.floors.forEach(f=>{
+    const on=miroFloorSel.includes(f);
+    const lbl=document.createElement("label");
+    lbl.className="miro-fchk"+(on?" on":"");
+    lbl.innerHTML=`<input type="checkbox" ${on?"checked":""}> ${f}`;
+    lbl.querySelector("input").addEventListener("change",e=>{
+      if(e.target.checked){if(!miroFloorSel.includes(f))miroFloorSel.push(f)}
+      else{miroFloorSel=miroFloorSel.filter(x=>x!==f)}
+      lbl.classList.toggle("on",e.target.checked);
+      buildMiroData();
+    });
+    box.appendChild(lbl);
+  });
 }
-// 対象フロアの一覧を返す(範囲オプションに応じて)
+// 対象フロア(DB.floors順を維持)
 function miroTargetFloors(){
-  if(miroOpt.scope==="all")return DB.floors.slice();
-  return [curFloor];
+  return DB.floors.filter(f=>miroFloorSel.includes(f));
 }
-// Miro貼付用データ(TSV)を生成
+// Miro貼付用データ(TSV)を生成 ── セクション×人名の格子(配置図風)
+// 列=各フロアの各配置/セクション、各列は人を上に詰める。末尾の空セルは出力しない(空白付箋を排除)
 function buildMiroData(){
   const floors=miroTargetFloors();
-  // 当該シフト・対象フロアの稼働者(管理者は除外。待機は含める=配置検討に必要)
-  const inScope=p=>p.shift===curShift && !p.admin && floors.includes(floorOf(p));
-  const people=DB.people.filter(inScope);
-  let txt="";
-  if(miroOpt.layout==="list"){
-    txt=buildMiroList(people,floors);
-  }else{
-    txt=buildMiroGrid(people,floors);
-  }
   const ta=document.getElementById("miroOut");
-  ta.value=txt;
   const stat=document.getElementById("miroStat");
-  if(stat){
-    const n=people.length;
-    const fl=floors.length;
-    stat.textContent=`${curShift} / ${miroOpt.scope==="all"?`全${fl}フロア`:curFloor} / ${n}名`;
+  if(!floors.length){
+    ta.value="(フロアを1つ以上選択してください)";
+    if(stat)stat.textContent=`${curShift} / フロア未選択`;
+    return;
   }
-}
-// 1行1人の一覧(タブ区切り: フロア / 配置 / セクション / 会社名 / 氏名 / LH / F)
-function buildMiroList(people,floors){
-  const head=["フロア","配置","セクション","会社名","氏名","LH","フォーク"].join("\t");
-  const rows=[head];
-  // フロア→配置→セクション順にソート
-  const placeOrder={OUT:0,IN:1,ICQA:2,WAIT:3};
-  const sorted=people.slice().sort((a,b)=>{
-    const fa=floors.indexOf(floorOf(a)),fb=floors.indexOf(floorOf(b));
-    if(fa!==fb)return fa-fb;
-    const la=locOf(a),lb=locOf(b);
-    const pa=la==="WAIT"?"WAIT":la.split("|")[0];
-    const pb=lb==="WAIT"?"WAIT":lb.split("|")[0];
-    if(placeOrder[pa]!==placeOrder[pb])return (placeOrder[pa]??9)-(placeOrder[pb]??9);
-    return sortPeople(a,b);
-  });
-  sorted.forEach(p=>{
-    const loc=locOf(p);
-    const place=loc==="WAIT"?"待機/欠勤":loc.split("|")[0];
-    const sec=loc==="WAIT"?"":loc.split("|")[1]||"";
-    rows.push([floorOf(p),place,sec,p.role||"",p.name||"",p.lh||"",p.fork?"F":""].join("\t"));
-  });
-  return rows.join("\n");
-}
-// セクション×人名の格子(配置図風)
-// 列=各フロアの各配置/セクション、行=その中の人名を縦に。複数フロアは続けて列展開
-function buildMiroGrid(people,floors){
-  // 列定義を作る: {floor, place, sec, label, members[]}
+  // 当該シフト・対象フロアの稼働者(管理者は除外。待機は配置検討に必要なので含める)
+  const people=DB.people.filter(p=>p.shift===curShift && !p.admin && floors.includes(floorOf(p)));
+  // 列定義: {label, members[]}
   const cols=[];
   floors.forEach(f=>{
     ["OUT","IN","ICQA"].forEach(pl=>{
       (DB.master[pl]||[]).forEach(s=>{
         const mem=people.filter(p=>floorOf(p)===f && locOf(p)===pl+"|"+s).sort(sortPeople);
-        if(mem.length)cols.push({label:`${f} ${pl}/${s}`,members:mem});
+        if(mem.length)cols.push({floor:f,label:`${f} ${pl}/${s}`,members:mem});
       });
     });
-    // 待機/欠勤
     const wait=people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople);
-    if(wait.length)cols.push({label:`${f} 待機/欠勤`,members:wait});
+    if(wait.length)cols.push({floor:f,label:`${f} 待機/欠勤`,members:wait});
   });
-  if(!cols.length)return "(該当する配置データがありません)";
-  // 行数=最大メンバー数+1(ヘッダー)
+  if(!cols.length){
+    ta.value="(該当する配置データがありません)";
+    if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / 0名`;
+    return;
+  }
   const maxRows=Math.max(...cols.map(c=>c.members.length));
   const lines=[];
   // ヘッダー行(各列のラベル)
-  lines.push(cols.map(c=>c.label).join("\t"));
-  // 各行: 列ごとに i番目のメンバー名(なければ空)
+  lines.push(trimTrailing(cols.map(c=>c.label)).join("\t"));
+  // 各行: 列ごとに i番目のメンバー名(フロア併記)。末尾の空セルは切り捨て
   for(let i=0;i<maxRows;i++){
-    lines.push(cols.map(c=>{
+    const cells=cols.map(c=>{
       const p=c.members[i];
       if(!p)return "";
-      return p.name+(p.fork?" [F]":"");
-    }).join("\t"));
+      // 各個人付箋にフロアを併記(例: "南口 優夏 (4F) [F]")
+      return `${p.name} (${c.floor})`+(p.fork?" [F]":"");
+    });
+    lines.push(trimTrailing(cells).join("\t"));
   }
-  return lines.join("\n");
+  ta.value=lines.join("\n");
+  if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / ${people.length}名`;
+}
+// 配列末尾の空文字を取り除く(行末の空セル→空白付箋を防ぐ)
+function trimTrailing(arr){
+  const a=arr.slice();
+  while(a.length&&a[a.length-1]==="")a.pop();
+  return a;
 }
 function copyMiroData(){
   const ta=document.getElementById("miroOut");
@@ -1679,7 +1659,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.22.3";
+const APP_VERSION="2026.06.23.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -2438,7 +2418,7 @@ function execPaste(){
 
 // グローバル公開(onclick等から参照)
 window.openSummary=openSummary;window.closeSummary=closeSummary;
-window.openMiroExport=openMiroExport;window.closeMiroExport=closeMiroExport;window.setMiroOpt=setMiroOpt;window.copyMiroData=copyMiroData;
+window.openMiroExport=openMiroExport;window.closeMiroExport=closeMiroExport;window.copyMiroData=copyMiroData;
 window.onUPHInput=onUPHInput;
 window.onUnitInput=onUnitInput;
 window.openAdd=openAdd;window.closeAdd=closeAdd;window.syncAddSec=syncAddSec;window.submitAdd=submitAdd;window.deleteCustom=deleteCustom;
