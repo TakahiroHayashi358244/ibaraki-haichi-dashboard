@@ -528,7 +528,7 @@ input[type=file]{display:none}
     </div>
     <div class="modal-body">
       <div class="miro-help">
-        <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付けてください。貼り付け時に「<b>付箋</b>」を選ぶと、1セルが1枚の付箋になります。</p>
+        <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付け、「<b>付箋</b>」を選んでください。「■」で始まる行がセクション見出し、その下が配置メンバーです（縦一列に並びます）。</p>
       </div>
       <div class="miro-opts">
         <div class="miro-opt-group" style="flex:1">
@@ -1463,28 +1463,19 @@ function buildMiroData(){
     if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / 0名`;
     return;
   }
-  const maxRows=Math.max(...cols.map(c=>c.members.length));
+  // 縦並び: 各行1セル(タブなし)。見出し→メンバーの順に縦に並べる。
+  // 全行がタブを含まない=列数1で揃うため、Miroが縦一列の付箋として確実に認識し、空白付箋も出ない。
   const lines=[];
-  // ヘッダー行(各列のラベル)
-  lines.push(trimTrailing(cols.map(c=>c.label)).join("\t"));
-  // 各行: 列ごとに i番目のメンバー名(フロア併記)。末尾の空セルは切り捨て
-  for(let i=0;i<maxRows;i++){
-    const cells=cols.map(c=>{
-      const p=c.members[i];
-      if(!p)return "";
-      // 各個人付箋にフロアを併記(例: "南口 優夏 (4F) [F]")
-      return `${p.name} (${c.floor})`+(p.fork?" [F]":"");
+  cols.forEach(c=>{
+    // セクション見出し(■で区切りを明示)
+    lines.push(`■ ${c.label}`);
+    // メンバー(フロア併記、フォークは[F])
+    c.members.forEach(p=>{
+      lines.push(`${p.name} (${c.floor})`+(p.fork?" [F]":""));
     });
-    lines.push(trimTrailing(cells).join("\t"));
-  }
+  });
   ta.value=lines.join("\n");
   if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / ${people.length}名`;
-}
-// 配列末尾の空文字を取り除く(行末の空セル→空白付箋を防ぐ)
-function trimTrailing(arr){
-  const a=arr.slice();
-  while(a.length&&a[a.length-1]==="")a.pop();
-  return a;
 }
 function copyMiroData(){
   const ta=document.getElementById("miroOut");
@@ -1662,7 +1653,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.23.2";
+const APP_VERSION="2026.06.23.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
