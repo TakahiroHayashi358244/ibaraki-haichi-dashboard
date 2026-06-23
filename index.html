@@ -528,12 +528,16 @@ input[type=file]{display:none}
     </div>
     <div class="modal-body">
       <div class="miro-help">
-        <p>下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付け、「<b>付箋</b>」を選んでください。全員が1枚ずつの付箋になって横一列に並びます（配置順）。</p>
+        <p>対象の<b>フロア</b>と<b>配置</b>を選ぶと、その組み合わせの人が抽出されます。下のデータを<b>コピー</b>して、Miroボード上で <b>Ctrl+V（Mac は Cmd+V）</b> で貼り付け、「<b>付箋</b>」を選んでください。</p>
       </div>
       <div class="miro-opts">
         <div class="miro-opt-group" style="flex:1">
           <label class="miro-opt-lbl">対象フロア（複数選択可）</label>
           <div class="miro-floors" id="miroFloors"></div>
+        </div>
+        <div class="miro-opt-group" style="flex:1">
+          <label class="miro-opt-lbl">対象の配置（複数選択可）</label>
+          <div class="miro-floors" id="miroPlaces"></div>
         </div>
       </div>
       <textarea id="miroOut" class="miro-out" readonly placeholder="ここにデータが表示されます"></textarea>
@@ -1402,11 +1406,15 @@ function closeSummary(){document.getElementById("summaryModal").classList.remove
 
 // ===== Miro用エクスポート =====
 let miroFloorSel=[];  // 選択中のフロア配列
+let miroPlaceSel=[];  // 選択中の配置配列(OUT/IN/ICQA/WAIT)
 let miroNames=[];     // 直近の出力名前リスト(コピー時のHTML table生成用)
+const MIRO_PLACES=[["OUT","OUT"],["IN","IN"],["ICQA","ICQA"],["WAIT","待機/欠勤"]];
 function openMiroExport(){
-  // 初期選択: 単一表示なら現フロア、全フロア表示なら全フロア
-  miroFloorSel=(viewMode==="multi")?DB.floors.slice():[curFloor];
+  // デフォルトは未選択(フロア・配置とも) ── 何も出力されない状態から始める
+  miroFloorSel=[];
+  miroPlaceSel=[];
   renderMiroFloors();
+  renderMiroPlaces();
   buildMiroData();
   document.getElementById("miroModal").classList.add("open");
 }
@@ -1430,6 +1438,25 @@ function renderMiroFloors(){
     box.appendChild(lbl);
   });
 }
+// 配置選択チェックを描画(OUT/IN/ICQA/待機)
+function renderMiroPlaces(){
+  const box=document.getElementById("miroPlaces");
+  if(!box)return;
+  box.innerHTML="";
+  MIRO_PLACES.forEach(([key,label])=>{
+    const on=miroPlaceSel.includes(key);
+    const lbl=document.createElement("label");
+    lbl.className="miro-fchk"+(on?" on":"");
+    lbl.innerHTML=`<input type="checkbox" ${on?"checked":""}> ${label}`;
+    lbl.querySelector("input").addEventListener("change",e=>{
+      if(e.target.checked){if(!miroPlaceSel.includes(key))miroPlaceSel.push(key)}
+      else{miroPlaceSel=miroPlaceSel.filter(x=>x!==key)}
+      lbl.classList.toggle("on",e.target.checked);
+      buildMiroData();
+    });
+    box.appendChild(lbl);
+  });
+}
 // 対象フロア(DB.floors順を維持)
 function miroTargetFloors(){
   return DB.floors.filter(f=>miroFloorSel.includes(f));
@@ -1445,19 +1472,27 @@ function buildMiroData(){
     if(stat)stat.textContent=`${curShift} / フロア未選択`;
     return;
   }
-  // 当該シフト・対象フロアの稼働者(管理者は除外。待機は配置検討に必要なので含める)
+  if(!miroPlaceSel.length){
+    ta.value="(配置を1つ以上選択してください)";
+    if(stat)stat.textContent=`${curShift} / 配置未選択`;
+    return;
+  }
+  // 当該シフト・対象フロアの稼働者(管理者は除外)
   const people=DB.people.filter(p=>p.shift===curShift && !p.admin && floors.includes(floorOf(p)));
-  // 配置順(フロア→OUT→IN→ICQA→待機→セクション)に名前を集める
+  // 選択フロア×選択配置の全組み合わせで名前を集める(フロア→OUT→IN→ICQA→待機→セクション順)
   const names=[];
   floors.forEach(f=>{
     ["OUT","IN","ICQA"].forEach(pl=>{
+      if(!miroPlaceSel.includes(pl))return;  // 未選択の配置はスキップ
       (DB.master[pl]||[]).forEach(s=>{
         people.filter(p=>floorOf(p)===f && locOf(p)===pl+"|"+s).sort(sortPeople)
           .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
       });
     });
-    people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople)
-      .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
+    if(miroPlaceSel.includes("WAIT")){
+      people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople)
+        .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
+    }
   });
   if(!names.length){
     ta.value="(該当する配置データがありません)";
@@ -1468,7 +1503,9 @@ function buildMiroData(){
   // 空セルが一切無いので空白付箋は出ず、付箋化も確実に成立する。
   miroNames=names.slice();  // コピー時のHTML table生成用に保持
   ta.value=names.join("\t");
-  if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / ${people.length}名`;
+  // 選択配置のラベルを統計に表示
+  const plLabels=MIRO_PLACES.filter(([k])=>miroPlaceSel.includes(k)).map(([,l])=>l).join("・");
+  if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / ${plLabels} / ${names.length}名`;
 }
 function copyMiroData(){
   const ta=document.getElementById("miroOut");
@@ -1668,7 +1705,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.23.5";
+const APP_VERSION="2026.06.23.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
