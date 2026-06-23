@@ -1402,6 +1402,7 @@ function closeSummary(){document.getElementById("summaryModal").classList.remove
 
 // ===== Miro用エクスポート =====
 let miroFloorSel=[];  // 選択中のフロア配列
+let miroNames=[];     // 直近の出力名前リスト(コピー時のHTML table生成用)
 function openMiroExport(){
   // 初期選択: 単一表示なら現フロア、全フロア表示なら全フロア
   miroFloorSel=(viewMode==="multi")?DB.floors.slice():[curFloor];
@@ -1465,6 +1466,7 @@ function buildMiroData(){
   }
   // 全員を1行にタブ区切りで並べる ── Miroはタブ区切りを表と認識し、横一列の付箋にする。
   // 空セルが一切無いので空白付箋は出ず、付箋化も確実に成立する。
+  miroNames=names.slice();  // コピー時のHTML table生成用に保持
   ta.value=names.join("\t");
   if(stat)stat.textContent=`${curShift} / ${floors.join("・")} / ${people.length}名`;
 }
@@ -1476,14 +1478,36 @@ function copyMiroData(){
     const stat=document.getElementById("miroStat");
     if(stat){const o=stat.textContent;stat.textContent="✓ コピーしました";setTimeout(()=>stat.textContent=o,1800)}
   };
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(done).catch(()=>{
-      ta.select();ta.setSelectionRange(0,99999);
-      try{document.execCommand("copy");done()}catch(e){alert("コピーできませんでした。手動で選択してコピーしてください")}
-    });
-  }else{
+  const fail=()=>{
+    // 最終手段: テキストエリアを選択して execCommand
     ta.select();ta.setSelectionRange(0,99999);
     try{document.execCommand("copy");done()}catch(e){alert("コピーできませんでした。手動で選択してコピーしてください")}
+  };
+  // MiroはクリップボードのHTML(table)を見て付箋化を判断する。
+  // スプレッドシートからのコピーを再現するため、text/html(<table>) と text/plain(タブ区切り) を両方載せる。
+  const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const cells=(miroNames.length?miroNames:txt.split("\t")).map(n=>`<td>${esc(n)}</td>`).join("");
+  const html=`<table><tr>${cells}</tr></table>`;
+  const plain=miroNames.length?miroNames.join("\t"):txt;
+  if(navigator.clipboard&&window.ClipboardItem){
+    try{
+      const item=new ClipboardItem({
+        "text/html":new Blob([html],{type:"text/html"}),
+        "text/plain":new Blob([plain],{type:"text/plain"})
+      });
+      navigator.clipboard.write([item]).then(done).catch(()=>{
+        // ClipboardItem不可時はテキストのみ
+        if(navigator.clipboard.writeText)navigator.clipboard.writeText(plain).then(done).catch(fail);
+        else fail();
+      });
+    }catch(e){
+      if(navigator.clipboard.writeText)navigator.clipboard.writeText(plain).then(done).catch(fail);
+      else fail();
+    }
+  }else if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(plain).then(done).catch(fail);
+  }else{
+    fail();
   }
 }
 
@@ -1644,7 +1668,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.23.4";
+const APP_VERSION="2026.06.23.5";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
