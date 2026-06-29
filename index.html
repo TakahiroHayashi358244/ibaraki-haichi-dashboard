@@ -248,6 +248,11 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .pz-zone.dragover{box-shadow:0 0 0 2px rgba(232,130,12,.55);border-color:var(--accent);background:rgba(232,130,12,.08)}
 .pz-lab{position:absolute;top:4px;left:5px;font-size:11px;font-weight:800;color:#fff;border-radius:4px;padding:1px 6px;line-height:1.4;letter-spacing:.02em}
 .pz-cards{gap:4px}
+/* 未割当エリア(ゾーン未指定のPick直下) */
+.pz-unassigned{margin:5px 0 2px;padding:5px 6px;border:1px dashed #c89b4a;border-radius:7px;background:rgba(232,130,12,.06);position:relative}
+.pz-unassigned.dragover{box-shadow:0 0 0 2px rgba(232,130,12,.55);border-style:solid;background:rgba(232,130,12,.1)}
+.pz-un-lab{display:inline-block;font-size:10px;font-weight:800;color:#9a6611;letter-spacing:.04em;margin-bottom:4px}
+.pz-un-cards{gap:4px}
 .sec-lbl{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
 .sec-lbl .n{font-weight:800}
 .cards{display:flex;flex-wrap:wrap;gap:5px;min-height:14px}
@@ -1135,6 +1140,16 @@ function renderPickZones(pl,sub,pool){
   wrap.className="sec pick-wrap";
   wrap.style.borderColor=hexToRgba(col,.5);wrap.style.background=hexToRgba(col,.05);
   wrap.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${pickMem.length?`<span class="n">${pickMem.length}</span>`:'<span class="empty">0</span>'}</div>`;
+  // 未割当(ゾーン未指定でPick直下=locがちょうどbaseLoc)の人を受けるエリア ── ゾーン分割表示で消えないように
+  const unassigned=pool.filter(p=>locOf(p)===baseLoc).sort(sortPeople);
+  const uz=document.createElement("div");
+  uz.className="pz-unassigned";uz.dataset.loc=baseLoc;
+  uz.innerHTML=`<span class="pz-un-lab">未割当</span>`;
+  const uzCards=document.createElement("div");uzCards.className="cards pz-un-cards";
+  unassigned.forEach(p=>uzCards.appendChild(card(p)));
+  uz.appendChild(uzCards);
+  // 未割当が居るときのみ表示(空のときは枠を出さずスッキリ)
+  if(unassigned.length)wrap.appendChild(uz);
   // 1ゾーンの枠を生成
   const makeZone=(z,gColor,tall)=>{
     const loc=baseLoc+"|"+z;           // "OUT|Pick|R"
@@ -1390,8 +1405,8 @@ function attachCardDrag(c,p){
     ghost.style.display="none";
     const under=document.elementFromPoint(e.clientX,e.clientY);
     ghost.style.display="";
-    let sec=under?under.closest(".pz-zone,.sec"):null;
-    if(sec&&sec.classList.contains("pick-wrap"))sec=null;  // Pick親枠への直接ドロップは無効(ゾーンにのみ配置)
+    let sec=under?under.closest(".pz-zone,.pz-unassigned,.sec"):null;
+    if(sec&&sec.classList.contains("pick-wrap"))sec=null;  // Pick親枠への直接ドロップは無効(ゾーン/未割当にのみ配置)
     if(sec!==hoverSec){
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(sec)sec.classList.add("dragover");
