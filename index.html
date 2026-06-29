@@ -71,8 +71,8 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
   width:24px!important;height:24px!important;border-radius:50%!important;display:flex;align-items:center;justify-content:center;
   font-size:11px;padding:0!important;border:2px solid var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.18)
 }
-.multi-mode .mc-cards .card .name,.multi-mode .mc-cards .card .badges,
-.multi-mode .mw-cards .card .name,.multi-mode .mw-cards .card .badges{display:none!important}
+.multi-mode .mc-cards .card .name,.multi-mode .mc-cards .card .name-wrap,.multi-mode .mc-cards .card .badges,
+.multi-mode .mw-cards .card .name,.multi-mode .mw-cards .card .name-wrap,.multi-mode .mw-cards .card .badges{display:none!important}
 /* admin の管理者リング ── multi モードでは黄色リングで強調 */
 .multi-mode .mc-cards .card.admin,.multi-mode .mw-cards .card.admin{box-shadow:0 0 0 2px #fbbf24!important}
 .multi-mode .mc-cards .card.admin .co,.multi-mode .mw-cards .card.admin .co{border-color:#fbbf24!important}
@@ -262,11 +262,20 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 body.dragging-active{cursor:grabbing}
 .floor-menu{position:fixed;z-index:10001;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 26px rgba(0,0,0,.22);padding:5px;min-width:120px;display:flex;flex-direction:column;gap:2px}
 .floor-menu .fm-hd{font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.05em;text-transform:uppercase;padding:3px 6px 4px}
+.floor-menu .fm-name-row{display:flex;gap:4px;padding:0 4px 6px}
+.floor-menu .fm-name{flex:1;min-width:0;font-family:inherit;font-size:13px;font-weight:600;border:1px solid var(--line);border-radius:6px;padding:5px 7px;background:var(--panel2);color:var(--txt)}
+.floor-menu .fm-name:focus{outline:none;border-color:var(--accent2)}
+.floor-menu .fm-save{font-family:inherit;font-size:11px;font-weight:800;border:none;background:var(--accent2);color:#fff;border-radius:6px;padding:0 10px;cursor:pointer;flex-shrink:0}
+.floor-menu .fm-save:hover{filter:brightness(1.08)}
 .floor-menu .fm-it{font-family:inherit;font-size:13px;font-weight:700;text-align:left;border:none;background:transparent;color:var(--txt);padding:6px 8px;border-radius:6px;cursor:pointer}
 .floor-menu .fm-it:hover{background:var(--panel2)}
 .floor-menu .fm-it.cur{color:var(--accent2)}
 body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-.card .name{font-size:13px;font-weight:700;line-height:1.1;white-space:nowrap}
+.card .name-wrap{width:39px;overflow:hidden;white-space:nowrap;flex-shrink:0;position:relative}
+.card .name{display:inline-block;font-size:13px;font-weight:700;line-height:1.1;white-space:nowrap}
+.card .name-wrap.ovf .name{width:max-content}
+.card:hover .name-wrap.ovf .name{animation:nmflow linear infinite}
+@keyframes nmflow{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .card .co{font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;flex-shrink:0;line-height:1.4}
 .card .badges{display:flex;gap:3px;align-items:center;flex-shrink:0}
 .badge{font-size:9px;font-weight:800;padding:1px 4px;border-radius:4px;flex-shrink:0;white-space:nowrap}
@@ -752,6 +761,7 @@ function hexToRgba(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255
 
 let layout={};                // 工程: uid -> "PLACE|SUBSEC" or "WAIT"
 let floorMove={};             // フロア異動: uid -> "5F"
+let nameOverride={};          // 名前変更: uid(元) -> "新しい表示名"
 let deletedSections={OUT:[],IN:[],ICQA:[]};  // 設定で削除されたセクションを記録(xlsx再読込でも復活させない)
 let curShift="日勤";
 let viewMode=localStorage.getItem("haichi3_view")||"single";  // "single"=1フロア / "multi"=全フロア横並び
@@ -813,6 +823,17 @@ function setFloorMove(k,fl){
   floorMove[k]=fl;
   if(window.fb)fb.set(fb.rRef("floorMove/"+k),fl).catch(e=>console.error("setFloorMove",e));
 }
+// 名前変更 ── uid(元)をキーに表示名を上書き保存。空文字なら解除(元の名前に戻す)
+function setNameOverride(k,nm){
+  const v=String(nm||"").trim();
+  if(v){nameOverride[k]=v;if(window.fb)fb.set(fb.rRef("nameOverride/"+k),v).catch(e=>console.error("setNameOverride",e));}
+  else{delete nameOverride[k];if(window.fb)fb.remove(fb.rRef("nameOverride/"+k)).catch(e=>console.error("setNameOverride.remove",e));}
+}
+// 表示名 ── nameOverrideがあればそれ、無ければ元のp.name
+function displayName(p){
+  const k=uidEnc(uid(p));
+  return (nameOverride[k]!==undefined&&nameOverride[k]!=="")?nameOverride[k]:p.name;
+}
 function clearFloorMove(k){
   delete floorMove[k];
   if(window.fb)fb.remove(fb.rRef("floorMove/"+k)).catch(e=>console.error("clearFloorMove",e));
@@ -833,6 +854,7 @@ function initFirebase(){
   // layout変化を購読
   fb.onValue(fb.rRef("layout"),snap=>{layout=snap.val()||{};render();markSummaryStale()});
   fb.onValue(fb.rRef("floorMove"),snap=>{floorMove=snap.val()||{};render();markSummaryStale()});
+  fb.onValue(fb.rRef("nameOverride"),snap=>{nameOverride=snap.val()||{};render();markSummaryStale()});
   fb.onValue(fb.rRef("custom"),snap=>{
     const obj=snap.val()||{};
     DB.people=DB.people.filter(p=>!p.custom);
@@ -1101,6 +1123,7 @@ function renderSingle(root){
   root.appendChild(places);
   renderStats(DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor));
   renderLegend();
+  setupNameMarquee(root);
 }
 // Pick をゾーンレイアウトで描画 ── 返り値は1つの .sec.pick-wrap
 function renderPickZones(pl,sub,pool){
@@ -1247,29 +1270,60 @@ function card(p){
   c.dataset.fork=p.fork?"1":"";
   c.dataset.shift=p.shift||"";
   // ホバー時のツールチップ(全モード共通) ── フルネーム/会社/シフトを補完表示
-  c.title=`${p.role} / ${p.name}`+(p.fork?" (F)":"")+(p.shift==="夜勤"?" (夜勤)":"")+(p.admin?" 👑管理者":"")+"  [ダブルクリックでフロア異動]";
-  if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
+  c.title=`${p.role} / ${displayName(p)}`+(p.fork?" (F)":"")+(p.shift==="夜勤"?" (夜勤)":"")+(p.admin?" 👑管理者":"")+"  [ダブルクリックでフロア異動]";
+  if(searchQ&&!displayName(p).includes(searchQ))c.style.opacity=".22";
   // 会社色(roleStyle)を左ボーダー・会社バッジに適用 ── 全体表示の丸と同じ配色
   const st=roleStyle(p.role);
   c.style.borderLeftColor=st.bg;
-  c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name">${p.name}</span><span class="co" style="background:${st.bg};color:${st.fg}">${companyChar(p)}</span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
+  const dn=displayName(p);
+  c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name-wrap"><span class="name">${dn}</span></span><span class="co" style="background:${st.bg};color:${st.fg}">${companyChar(p)}</span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
+  // 名前がはみ出す場合のみマーキー対象に(レンダー後に判定)
+  c.dataset.fullname=dn;
   attachCardDrag(c,p);
   // フロア異動 ── ダブルクリックでフロア選択メニュー(セレクタ廃止の代替)
   c.addEventListener("dblclick",e=>{e.preventDefault();e.stopPropagation();openFloorMenu(p,c)});
   return c;
 }
+// レンダー後: 名前枠からはみ出すカードにマーキー(一方向ループ)を仕込む
+function setupNameMarquee(root){
+  (root||document).querySelectorAll(".card .name-wrap").forEach(wrap=>{
+    if(wrap.dataset.mq)return;  // 処理済みskip
+    const nm=wrap.querySelector(".name");
+    if(!nm)return;
+    const overflow=nm.scrollWidth>wrap.clientWidth+1;
+    if(overflow){
+      wrap.classList.add("ovf");
+      // 継ぎ目なくループさせるため同じ名前を複製(各々に末尾18pxの隙間 → -50%で完全一致)
+      const txt=nm.textContent;
+      const unit=`<span class="nm-unit">${txt}</span><span style="display:inline-block;width:18px"></span>`;
+      nm.innerHTML=unit+unit;
+      const dur=Math.max(3,(nm.scrollWidth/2)/16);
+      nm.style.animationDuration=dur.toFixed(1)+"s";
+    }
+    wrap.dataset.mq="1";
+  });
+}
 // フロア異動メニュー(小型カード用) ── ダブルクリックで開く
 let _floorMenu=null;
 function openFloorMenu(p,anchor){
   if(_floorMenu){_floorMenu.remove();_floorMenu=null}
+  const k=uidEnc(uid(p));
   const m=document.createElement("div");m.className="floor-menu";
-  m.innerHTML=`<div class="fm-hd">フロア異動</div>`+DB.floors.map(f=>`<button class="fm-it${f===floorOf(p)?" cur":""}" data-f="${f}">${f}${f===floorOf(p)?" ●":""}</button>`).join("");
+  m.innerHTML=`<div class="fm-hd">名前</div>`+
+    `<div class="fm-name-row"><input type="text" class="fm-name" value="${displayName(p).replace(/"/g,'&quot;')}" placeholder="名前を入力"><button class="fm-save">保存</button></div>`+
+    `<div class="fm-hd">フロア異動</div>`+
+    DB.floors.map(f=>`<button class="fm-it${f===floorOf(p)?" cur":""}" data-f="${f}">${f}${f===floorOf(p)?" ●":""}</button>`).join("");
   document.body.appendChild(m);_floorMenu=m;
   const r=anchor.getBoundingClientRect();
-  let left=Math.min(window.innerWidth-150,Math.max(8,r.left));
+  let left=Math.min(window.innerWidth-170,Math.max(8,r.left));
   let top=r.bottom+4; if(top+m.offsetHeight>window.innerHeight-8)top=r.top-m.offsetHeight-4;
   m.style.left=left+"px";m.style.top=top+"px";
-  m.querySelectorAll(".fm-it").forEach(b=>b.onclick=()=>{setFloorMove(uidEnc(uid(p)),b.dataset.f);_floorMenu.remove();_floorMenu=null;render()});
+  const inp=m.querySelector(".fm-name");
+  const saveName=()=>{setNameOverride(k,inp.value);_floorMenu.remove();_floorMenu=null;render()};
+  m.querySelector(".fm-save").onclick=saveName;
+  inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();saveName()}});
+  inp.addEventListener("pointerdown",e=>e.stopPropagation());
+  m.querySelectorAll(".fm-it").forEach(b=>b.onclick=()=>{setFloorMove(k,b.dataset.f);_floorMenu.remove();_floorMenu=null;render()});
   const close=ev=>{if(_floorMenu&&!_floorMenu.contains(ev.target)){_floorMenu.remove();_floorMenu=null;document.removeEventListener("pointerdown",close)}};
   setTimeout(()=>document.addEventListener("pointerdown",close),0);
 }
@@ -1278,7 +1332,7 @@ let _cardPopover=null;
 function showCardPopover(p,anchor){
   if(_cardPopover){_cardPopover.remove();_cardPopover=null}
   const pop=document.createElement("div");pop.className="card-popover";
-  pop.innerHTML=`<div class="pop-role">${p.role}</div><div class="pop-name">${p.name}</div><div class="pop-meta">${p.shift}${p.fork?' / フォーク':''}${p.admin?' / 👑管理者':''}</div>`;
+  pop.innerHTML=`<div class="pop-role">${p.role}</div><div class="pop-name">${displayName(p)}</div><div class="pop-meta">${p.shift}${p.fork?' / フォーク':''}${p.admin?' / 👑管理者':''}</div>`;
   document.body.appendChild(pop);
   _cardPopover=pop;
   const r=anchor.getBoundingClientRect();
@@ -1385,7 +1439,7 @@ function renderHitbar(){
   const wrap=document.getElementById("hitbarWrap");
   if(!searchQ){wrap.innerHTML="";return}
   // 同一シフト内で全フロア横断ヒット
-  const hits=DB.people.filter(p=>p.shift===curShift && p.name.includes(searchQ));
+  const hits=DB.people.filter(p=>p.shift===curShift && displayName(p).includes(searchQ));
   const bar=document.createElement("div");
   if(hits.length===0){
     bar.className="hitbar none";
@@ -1403,7 +1457,7 @@ function renderHitbar(){
     chip.className="hitchip"+(here?" here":"");
     const loc=locOf(p);
     const where=loc==="WAIT"?"待機":loc.split("|").join(" / ");
-    chip.innerHTML=`${p.name} <span class="hf">${fl}</span> <span style="color:var(--sub);font-weight:600">${where}</span>`;
+    chip.innerHTML=`${displayName(p)} <span class="hf">${fl}</span> <span style="color:var(--sub);font-weight:600">${where}</span>`;
     if(!here)chip.onclick=()=>{curFloor=fl;render()};
     bar.appendChild(chip);
   });
@@ -1564,10 +1618,10 @@ function openSummary(){
           const bg=isInverse?st.bg:hexToRgba(st.bg,.16);
           const fg=isInverse?st.fg:st.bg;
           const bd=isInverse?st.bg:hexToRgba(st.bg,.35);
-          return `<span class="nm" style="background:${bg};color:${fg};border-color:${bd}">${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`;
+          return `<span class="nm" style="background:${bg};color:${fg};border-color:${bd}">${displayName(p)}${p.fork?' <span class="fk">F</span>':''}</span>`;
         };
         const names=mem.map(renderPill).join("");
-        const adminNames=memAdm.map(p=>`<span class="nm-admin">👑 ${p.name}${p.fork?' <span class="fk">F</span>':''}</span>`).join("");
+        const adminNames=memAdm.map(p=>`<span class="nm-admin">👑 ${displayName(p)}${p.fork?' <span class="fk">F</span>':''}</span>`).join("");
         // 通常メンバー + 管理者枠
         const cellNames=[names,adminNames].filter(Boolean).join(adminNames&&names?'<span class="nm-sep">/</span>':'')||'<span class="z">—</span>';
         const hcCell=mem.length?mem.length+(memAdm.length?`<span class="adm-add">+${memAdm.length}</span>`:''):(memAdm.length?`<span class="adm-only">${memAdm.length}</span>`:0);
@@ -1579,7 +1633,7 @@ function openSummary(){
     });
     const waitMem=fp.filter(p=>locOf(p)==="WAIT");
     if(waitMem.length){
-      const names=waitMem.map(p=>`<span class="nm op">${p.name}</span>`).join("");
+      const names=waitMem.map(p=>`<span class="nm op">${displayName(p)}</span>`).join("");
       html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:60px"><col style="width:55px"><col></colgroup>`+
         `<tr><td class="plh" style="background:#94a3b8">待機/欠勤</td><td class="plh" style="background:#94a3b8">${waitMem.length}名</td><td class="plh" style="background:#94a3b8">LH ${fmtLH(lhSum(waitMem))}</td><td class="plh" style="background:#94a3b8"></td></tr>`+
         `<tr><td class="secname">—</td><td>${waitMem.length}</td><td class="lh">${fmtLH(lhSum(waitMem))}</td><td class="nmcell">${names}</td></tr></table>`;
@@ -1680,12 +1734,12 @@ function buildMiroData(){
         const isZonedPick=(pl==="OUT"&&PICK_ZONE_LAYOUT.enabled&&s===PICK_ZONE_LAYOUT.secName);
         const matchLoc=p=>{const l=locOf(p);return isZonedPick?(l===exact||l.indexOf(exact+"|")===0):(l===exact)};
         people.filter(p=>floorOf(p)===f && matchLoc(p)).sort(sortPeople)
-          .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
+          .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
       });
     });
     if(miroPlaceSel.includes("WAIT")){
       people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople)
-        .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
+        .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
     }
   });
   if(!names.length){
@@ -2210,6 +2264,7 @@ function wipeAll(){
   if(window.fb){
     fb.remove(fb.rRef("layout"));
     fb.remove(fb.rRef("floorMove"));
+    fb.remove(fb.rRef("nameOverride"));
     fb.remove(fb.rRef("custom"));
     fb.remove(fb.rRef("master"));
     fb.remove(fb.rRef("deletedSections"));
@@ -2223,7 +2278,7 @@ function wipeAll(){
   }
   localStorage.removeItem("haichi3_lastCheck");
   localStorage.setItem("haichi3_wiped","1");  // 次回起動時の表示をクリーンに
-  layout={};floorMove={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={out:0,in:0};targetUnit={out:0,in:0};targetFcst={out:0,in:0};summaryNote="";
+  layout={};floorMove={};nameOverride={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={out:0,in:0};targetUnit={out:0,in:0};targetFcst={out:0,in:0};summaryNote="";
   alert("削除しました。ページを再読み込みします。");
   location.reload();
 }
@@ -2253,7 +2308,7 @@ function buildPrintHTML(){
           `<div class="print-sec-lbl" style="color:${col}"><span>${esc(sub)}</span><span>${mem.length}</span></div><div class="print-cards">`;
         mem.forEach(p=>{
           const st=roleStyle(p.role);
-          html+=`<div class="print-card" style="border-left:3px solid ${st.bg};padding-left:4px"><div class="pr" style="color:${st.bg}">${esc(p.role)}</div><div class="pnm">${esc(p.name)}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
+          html+=`<div class="print-card" style="border-left:3px solid ${st.bg};padding-left:4px"><div class="pr" style="color:${st.bg}">${esc(p.role)}</div><div class="pnm">${esc(displayName(p))}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
         });
         html+=`</div></div>`;
       });
@@ -2261,7 +2316,7 @@ function buildPrintHTML(){
     });
     html+=`</div>`; // /print-places
     const w=fp.filter(p=>locOf(p)==="WAIT");
-    if(w.length){html+=`<div style="margin-top:6px;font-size:10px;color:#666">待機/欠勤(${w.length}名): ${w.map(p=>esc(p.name)).join("、")}</div>`}
+    if(w.length){html+=`<div style="margin-top:6px;font-size:10px;color:#666">待機/欠勤(${w.length}名): ${w.map(p=>esc(displayName(p))).join("、")}</div>`}
     html+=`</div>`; // /print-floor
   });
   return html;
@@ -2467,7 +2522,7 @@ function parseNewFormat(rows){
     // 名前空欄でも会社名(役職)があれば仮名で取り込み(例: 名簿の予約枠)
     if(!name){
       if(!role)continue;  // 会社名すらない=完全な空行はスキップ
-      name=`${role} #${no}`;  // 例: "トップスポット #11"
+      name=role;  // 名前空欄 → 会社名のみを仮名に(番号なし)
     }else if(/^\d+$/.test(name)&&role){
       // 数字のみの名前 → 所属名を前置して識別しやすく
       name=`${role} ${name}`;
