@@ -298,6 +298,11 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .modal{background:var(--panel);border-radius:16px;max-width:1180px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden}
 .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--line)}
 .modal-head-actions{display:flex;align-items:center;gap:8px}
+.sum-shift-toggle{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel2)}
+.sum-shift-toggle .ss-btn{font-family:inherit;font-size:12px;font-weight:800;border:none;background:transparent;color:var(--sub);padding:5px 14px;cursor:pointer;transition:.12s}
+.sum-shift-toggle .ss-btn:hover{background:var(--panel)}
+.sum-shift-toggle .ss-btn.active{background:var(--accent);color:#fff}
+.sum-shift-toggle .ss-btn[data-shift="夜勤"].active{background:#1e293b}
 .refresh-btn{position:relative;display:inline-flex;align-items:center;gap:5px;padding:5px 12px;font-size:12px}
 .refresh-btn .rf-icon{font-size:14px;font-weight:900}
 .refresh-btn .rf-dot{display:none;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-left:4px;animation:rfPulse 1.5s ease-in-out infinite}
@@ -456,6 +461,10 @@ input[type=file]{display:none}
     <div class="modal-head">
       <h2 id="summaryTitle">配置サマリ</h2>
       <div class="modal-head-actions">
+        <div class="sum-shift-toggle" id="sumShiftToggle">
+          <button class="ss-btn" data-shift="日勤" onclick="setSummaryShift('日勤')">日勤</button>
+          <button class="ss-btn" data-shift="夜勤" onclick="setSummaryShift('夜勤')">夜勤</button>
+        </div>
         <button class="btn refresh-btn" id="sumRefresh" onclick="openSummary()" title="サマリを最新に更新"><span class="rf-icon">↻</span> 更新<span class="rf-dot" id="rfDot"></span></button>
         <button class="modal-x" onclick="closeSummary()">×</button>
       </div>
@@ -1537,7 +1546,11 @@ function renderLegend(){
   });
   const f=document.createElement("span");f.innerHTML='<span class="badge fork">F</span>フォーク有資格';L.appendChild(f);
 }
-function setShift(s,el){curShift=s;document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));el.classList.add("active");curFloor=null;render();
+function setShift(s,el){
+  curShift=s;
+  // タブのactive表示を同期(el指定があればそれ、無ければdata-shiftで判定)
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active",el?(t===el):(t.dataset.shift===s)));
+  curFloor=null;render();
   // サマリが開いていればシフトに合わせて再構築(FCST/UPH/UNIT/特記事項を切替)
   const sm=document.getElementById("summaryModal");
   if(sm&&sm.classList.contains("open"))openSummary();
@@ -1557,7 +1570,7 @@ function openSummary(){
   const fl=DB.floors.filter(f=>all.some(p=>floorOf(p)===f));
   document.getElementById("summaryTitle").textContent=`配置サマリ(${curShift})`;
   const body=document.getElementById("summaryBody");
-  if(fl.length===0){body.innerHTML=`<p class="sumnote">${curShift}の出勤予定者がいません。</p>`;document.getElementById("summaryModal").classList.add("open");return}
+  if(fl.length===0){body.innerHTML=`<p class="sumnote">${curShift}の出勤予定者がいません。</p>`;syncSummaryShiftToggle();document.getElementById("summaryModal").classList.add("open");return}
   const lhSum=arr=>arr.reduce((s,p)=>s+(p.lh||0),0);  // 集計対象は事前に admin 除外済み
   const fmtLH=n=>(Math.round(n*10)/10).toString().replace(/\.0$/,"");
   let html="";
@@ -1685,9 +1698,21 @@ function openSummary(){
   // 特記事項の現在値を反映
   const noteEl=document.getElementById("summaryNote");
   if(noteEl)noteEl.value=tNote();
+  syncSummaryShiftToggle();  // シフトトグルの選択表示を同期
   document.getElementById("summaryModal").classList.add("open");
 }
 function closeSummary(){document.getElementById("summaryModal").classList.remove("open")}
+// サマリモーダル内でシフトを切り替え ── メイン画面のシフトも連動し、サマリを再構築
+function setSummaryShift(s){
+  if(curShift===s)return;
+  setShift(s);  // メイン画面のシフトも切替+配置ボード追従。サマリが開いていればsetShift内で再構築される
+}
+// サマリのシフトトグルの現在選択を更新
+function syncSummaryShiftToggle(){
+  document.querySelectorAll("#sumShiftToggle .ss-btn").forEach(b=>{
+    b.classList.toggle("active",b.dataset.shift===curShift);
+  });
+}
 
 // ===== Miro用エクスポート =====
 let miroFloorSel=[];  // 選択中のフロア配列
@@ -2007,7 +2032,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.29.3";
+const APP_VERSION="2026.06.29.4";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
