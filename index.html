@@ -71,6 +71,9 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
   width:24px!important;height:24px!important;border-radius:50%!important;display:flex;align-items:center;justify-content:center;
   font-size:11px;padding:0!important;border:2px solid var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.18)
 }
+/* 全フロア表示の丸は名前頭文字(co-initial)を表示、会社頭文字(co-company)は隠す */
+.multi-mode .mc-cards .card .co .co-company,.multi-mode .mw-cards .card .co .co-company{display:none}
+.multi-mode .mc-cards .card .co .co-initial,.multi-mode .mw-cards .card .co .co-initial{display:inline}
 .multi-mode .mc-cards .card .name,.multi-mode .mc-cards .card .name-wrap,.multi-mode .mc-cards .card .badges,
 .multi-mode .mw-cards .card .name,.multi-mode .mw-cards .card .name-wrap,.multi-mode .mw-cards .card .badges{display:none!important}
 /* admin の管理者リング ── multi モードでは黄色リングで強調 */
@@ -282,6 +285,7 @@ body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1p
 .card:hover .name-wrap.ovf .name{animation:nmflow linear infinite}
 @keyframes nmflow{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .card .co{font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;flex-shrink:0;line-height:1.4}
+.card .co .co-initial{display:none}
 .card .badges{display:flex;gap:3px;align-items:center;flex-shrink:0}
 .badge{font-size:9px;font-weight:800;padding:1px 4px;border-radius:4px;flex-shrink:0;white-space:nowrap}
 .badge.fork{background:var(--fork);color:#fff}
@@ -1311,7 +1315,10 @@ function card(p){
   const st=roleStyle(p.role);
   c.style.borderLeftColor=st.bg;
   const dn=displayName(p);
-  c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name-wrap"><span class="name">${dn}</span></span><span class="co" style="background:${st.bg};color:${st.fg}">${companyChar(p)}</span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
+  // 会社頭文字(通常バッジ用)と名前頭文字(全フロア表示の丸用)。名前頭文字は表示名ベース、数字のみ/空なら会社頭文字
+  const coChar=companyChar(p);
+  const nameInitial=(!dn||/^\d+$/.test(dn.trim()))?coChar:dn.trim()[0];
+  c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name-wrap"><span class="name">${dn}</span></span><span class="co" style="background:${st.bg};color:${st.fg}"><span class="co-company">${coChar}</span><span class="co-initial">${nameInitial}</span></span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
   // 名前がはみ出す場合のみマーキー対象に(レンダー後に判定)
   c.dataset.fullname=dn;
   attachCardDrag(c,p);
@@ -2032,7 +2039,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.29.4";
+const APP_VERSION="2026.06.29.5";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
