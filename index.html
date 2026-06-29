@@ -785,10 +785,27 @@ function toggleViewMode(){
 let curFloor=null;
 let searchQ="";
 let fbInited=false;
-let targetUPH={out:0,in:0};   // OUT/IN のターゲットUPH(全フロア共通・Firebase同期)
-let targetUnit={out:0,in:0};  // OUT/IN のターゲットUNIT数(全フロア共通・Firebase同期)
-let targetFcst={out:0,in:0};  // OUT/IN のFCST(物量予測・手入力・全フロア共通・Firebase同期)
-let summaryNote="";           // サマリ特記事項(手入力・全端末共有・Firebase同期)
+let targetUPH={日勤:{out:0,in:0},夜勤:{out:0,in:0}};   // ターゲットUPH(シフト別・Firebase同期)
+let targetUnit={日勤:{out:0,in:0},夜勤:{out:0,in:0}};  // ターゲットUNIT数(シフト別・Firebase同期)
+let targetFcst={日勤:{out:0,in:0},夜勤:{out:0,in:0}};  // FCST(物量予測・手入力・シフト別・Firebase同期)
+let summaryNote={日勤:"",夜勤:""};           // サマリ特記事項(手入力・シフト別・全端末共有・Firebase同期)
+// 現在シフトのサマリ値アクセサ
+function tFcst(){return targetFcst[curShift]||(targetFcst[curShift]={out:0,in:0})}
+function tUPH(){return targetUPH[curShift]||(targetUPH[curShift]={out:0,in:0})}
+function tUnit(){return targetUnit[curShift]||(targetUnit[curShift]={out:0,in:0})}
+function tNote(){return summaryNote[curShift]||""}
+// Firebaseから来たデータを正規化(旧形式{out,in}=共通値なら両シフトに展開)
+function normShiftPair(t){
+  if(!t||typeof t!=="object")return {日勤:{out:0,in:0},夜勤:{out:0,in:0}};
+  // 旧形式(out/inを直接持つ) → 両シフト共通として移行
+  if(("out"in t)||("in"in t))return {日勤:{out:+t.out||0,in:+t.in||0},夜勤:{out:+t.out||0,in:+t.in||0}};
+  return {日勤:{out:+(t.日勤?.out)||0,in:+(t.日勤?.in)||0},夜勤:{out:+(t.夜勤?.out)||0,in:+(t.夜勤?.in)||0}};
+}
+function normNote(t){
+  if(typeof t==="string")return {日勤:t,夜勤:t};  // 旧形式(単一文字列) → 両シフトに移行
+  if(t&&typeof t==="object")return {日勤:String(t.日勤||""),夜勤:String(t.夜勤||"")};
+  return {日勤:"",夜勤:""};
+}
 
 // ===== Firebase 同期 =====
 function uid(p){return p.no+"_"+p.name}
@@ -924,43 +941,37 @@ function initFirebase(){
     render();
     markSummaryStale();
   });
-  // ターゲットUPH(OUT/IN)の同期 ── 全端末で共有
+  // ターゲットUPH(OUT/IN)の同期 ── シフト別・全端末で共有
   fb.onValue(fb.rRef("targetUPH"),snap=>{
-    const t=snap.val();
-    targetUPH=(t&&typeof t==="object")?{out:+t.out||0,in:+t.in||0}:{out:0,in:0};
+    targetUPH=normShiftPair(snap.val());
     const oi=document.getElementById("uphOut"),ii=document.getElementById("uphIn");
-    // 入力中の欄は上書きしない(自分の打鍵を妨げない)
-    if(oi&&document.activeElement!==oi)oi.value=targetUPH.out||"";
-    if(ii&&document.activeElement!==ii)ii.value=targetUPH.in||"";
+    if(oi&&document.activeElement!==oi)oi.value=tUPH().out||"";
+    if(ii&&document.activeElement!==ii)ii.value=tUPH().in||"";
     refreshTP();
     markSummaryStale();
   });
-  // ターゲットUNIT数(OUT/IN)の同期 ── 全端末で共有
+  // ターゲットUNIT数(OUT/IN)の同期 ── シフト別・全端末で共有
   fb.onValue(fb.rRef("targetUnit"),snap=>{
-    const t=snap.val();
-    targetUnit=(t&&typeof t==="object")?{out:+t.out||0,in:+t.in||0}:{out:0,in:0};
+    targetUnit=normShiftPair(snap.val());
     const oi=document.getElementById("unitOut"),ii=document.getElementById("unitIn");
-    if(oi&&document.activeElement!==oi)oi.value=targetUnit.out||"";
-    if(ii&&document.activeElement!==ii)ii.value=targetUnit.in||"";
+    if(oi&&document.activeElement!==oi)oi.value=tUnit().out||"";
+    if(ii&&document.activeElement!==ii)ii.value=tUnit().in||"";
     refreshTP();
     markSummaryStale();
   });
-  // FCST(物量予測 OUT/IN)の同期 ── 全端末で共有
+  // FCST(物量予測 OUT/IN)の同期 ── シフト別・全端末で共有
   fb.onValue(fb.rRef("targetFcst"),snap=>{
-    const t=snap.val();
-    targetFcst=(t&&typeof t==="object")?{out:+t.out||0,in:+t.in||0}:{out:0,in:0};
+    targetFcst=normShiftPair(snap.val());
     const oi=document.getElementById("fcstOut"),ii=document.getElementById("fcstIn");
-    if(oi&&document.activeElement!==oi)oi.value=targetFcst.out||"";
-    if(ii&&document.activeElement!==ii)ii.value=targetFcst.in||"";
+    if(oi&&document.activeElement!==oi)oi.value=tFcst().out||"";
+    if(ii&&document.activeElement!==ii)ii.value=tFcst().in||"";
     markSummaryStale();
   });
-  // 特記事項の同期 ── 全端末で共有
+  // 特記事項の同期 ── シフト別・全端末で共有
   fb.onValue(fb.rRef("summaryNote"),snap=>{
-    const t=snap.val();
-    summaryNote=(typeof t==="string")?t:"";
+    summaryNote=normNote(snap.val());
     const el=document.getElementById("summaryNote");
-    // 入力中の欄は上書きしない(自分の打鍵を妨げない)
-    if(el&&document.activeElement!==el)el.value=summaryNote;
+    if(el&&document.activeElement!==el)el.value=tNote();
     markSummaryStale();
   });
   // 接続状態UI更新
@@ -1526,7 +1537,11 @@ function renderLegend(){
   });
   const f=document.createElement("span");f.innerHTML='<span class="badge fork">F</span>フォーク有資格';L.appendChild(f);
 }
-function setShift(s,el){curShift=s;document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));el.classList.add("active");curFloor=null;render()}
+function setShift(s,el){curShift=s;document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));el.classList.add("active");curFloor=null;render();
+  // サマリが開いていればシフトに合わせて再構築(FCST/UPH/UNIT/特記事項を切替)
+  const sm=document.getElementById("summaryModal");
+  if(sm&&sm.classList.contains("open"))openSummary();
+}
 function resetLayout(){if(confirm("配置とフロア異動を名簿の初期状態に戻しますか?(全端末に反映されます)")){clearAllLayout();render()}}
 
 function openSummary(){
@@ -1576,15 +1591,15 @@ function openSummary(){
   // ★ FCST(物量予測) 入力行 ── 目標UPHの上に配置(手入力・計算なし)
   html+=`<tr class="fcst-row">`+
     `<td class="secname">📈 FCST</td>`+
-    `<td colspan="2"><input type="number" id="fcstOut" class="fcst-input" min="0" step="1" placeholder="物量" value="${targetFcst.out||''}" oninput="onFcstInput('out',this.value)"></td>`+
-    `<td colspan="2"><input type="number" id="fcstIn" class="fcst-input" min="0" step="1" placeholder="物量" value="${targetFcst.in||''}" oninput="onFcstInput('in',this.value)"></td>`+
+    `<td colspan="2"><input type="number" id="fcstOut" class="fcst-input" min="0" step="1" placeholder="物量" value="${tFcst().out||''}" oninput="onFcstInput('out',this.value)"></td>`+
+    `<td colspan="2"><input type="number" id="fcstIn" class="fcst-input" min="0" step="1" placeholder="物量" value="${tFcst().in||''}" oninput="onFcstInput('in',this.value)"></td>`+
     `<td colspan="6" class="fcst-note">OUT / IN の物量予測(手入力)</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ ターゲットUPH 入力行(OUT列・IN列の下にUPH入力欄を配置)
   html+=`<tr class="uph-row">`+
     `<td class="secname">🎯 目標UPH</td>`+
-    `<td colspan="2"><input type="number" id="uphOut" class="uph-input" min="0" step="1" placeholder="UPH" value="${targetUPH.out||''}" oninput="onUPHInput('out',this.value)"> <span class="uph-unit">/h</span></td>`+
-    `<td colspan="2"><input type="number" id="uphIn" class="uph-input" min="0" step="1" placeholder="UPH" value="${targetUPH.in||''}" oninput="onUPHInput('in',this.value)"></td>`+
+    `<td colspan="2"><input type="number" id="uphOut" class="uph-input" min="0" step="1" placeholder="UPH" value="${tUPH().out||''}" oninput="onUPHInput('out',this.value)"> <span class="uph-unit">/h</span></td>`+
+    `<td colspan="2"><input type="number" id="uphIn" class="uph-input" min="0" step="1" placeholder="UPH" value="${tUPH().in||''}" oninput="onUPHInput('in',this.value)"></td>`+
     `<td colspan="6" class="uph-note">LH合計 × 目標UPH = 出荷可能TP</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ 出荷可能TP 行(OUT/INそれぞれ LH×UPH)
@@ -1597,8 +1612,8 @@ function openSummary(){
   // ★ ターゲットUNIT数 入力行(OUT列・IN列の下にUNIT入力欄を配置)
   html+=`<tr class="unit-row">`+
     `<td class="secname">🎯 ターゲットUNIT</td>`+
-    `<td colspan="2"><input type="number" id="unitOut" class="unit-input" min="0" step="1" placeholder="UNIT" value="${targetUnit.out||''}" oninput="onUnitInput('out',this.value)"></td>`+
-    `<td colspan="2"><input type="number" id="unitIn" class="unit-input" min="0" step="1" placeholder="UNIT" value="${targetUnit.in||''}" oninput="onUnitInput('in',this.value)"></td>`+
+    `<td colspan="2"><input type="number" id="unitOut" class="unit-input" min="0" step="1" placeholder="UNIT" value="${tUnit().out||''}" oninput="onUnitInput('out',this.value)"></td>`+
+    `<td colspan="2"><input type="number" id="unitIn" class="unit-input" min="0" step="1" placeholder="UNIT" value="${tUnit().in||''}" oninput="onUnitInput('in',this.value)"></td>`+
     `<td colspan="6" class="unit-note">処理可能TP − ターゲットUNIT = 差異</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ 差異 行(処理可能TP − ターゲットUNIT。プラス=余力 / マイナス=不足)
@@ -1669,7 +1684,7 @@ function openSummary(){
   refreshTP();   // モーダル表示時にTPセルを埋める
   // 特記事項の現在値を反映
   const noteEl=document.getElementById("summaryNote");
-  if(noteEl)noteEl.value=summaryNote||"";
+  if(noteEl)noteEl.value=tNote();
   document.getElementById("summaryModal").classList.add("open");
 }
 function closeSummary(){document.getElementById("summaryModal").classList.remove("open")}
@@ -1832,18 +1847,18 @@ function saveTargetFcst(){
 }
 function onFcstInput(which,val){
   const n=Math.max(0,parseFloat(val)||0);
-  targetFcst[which]=n;
+  tFcst()[which]=n;
   saveTargetFcst();
 }
 // 特記事項(手入力・全端末共有)
 function onSummaryNoteInput(val){
-  summaryNote=val;
-  if(window.fb)fb.set(fb.rRef("summaryNote"),val).catch(e=>console.error("saveSummaryNote",e));
+  summaryNote[curShift]=val;
+  if(window.fb)fb.set(fb.rRef("summaryNote"),summaryNote).catch(e=>console.error("saveSummaryNote",e));
 }
 // UPH入力時(OUT/IN) ── 即ローカル反映+TP再計算、Firebaseへ保存
 function onUPHInput(which,val){
   const n=Math.max(0,parseFloat(val)||0);
-  targetUPH[which]=n;
+  tUPH()[which]=n;
   refreshTP();
   saveTargetUPH();
 }
@@ -1853,7 +1868,7 @@ function saveTargetUnit(){
 // ターゲットUNIT入力時(OUT/IN) ── 即ローカル反映+差異再計算、Firebaseへ保存
 function onUnitInput(which,val){
   const n=Math.max(0,parseFloat(val)||0);
-  targetUnit[which]=n;
+  tUnit()[which]=n;
   refreshTP();
   saveTargetUnit();
 }
@@ -1865,13 +1880,13 @@ function refreshTP(){
   if(!cellOut||!cellIn)return;  // サマリ未表示なら何もしない
   const lhOut=parseFloat(cellOut.dataset.lh||"0")||0;
   const lhIn=parseFloat(cellIn.dataset.lh||"0")||0;
-  const tpOut=Math.round(lhOut*targetUPH.out);
-  const tpIn=Math.round(lhIn*targetUPH.in);
+  const tpOut=Math.round(lhOut*tUPH().out);
+  const tpIn=Math.round(lhIn*tUPH().in);
   const fmt=n=>n.toLocaleString("ja-JP");
-  cellOut.innerHTML=targetUPH.out>0
+  cellOut.innerHTML=tUPH().out>0
     ?`<b>${fmt(tpOut)}</b><span class="tp-sub">TP</span>`
     :`<span class="tp-hint">UPH未入力</span>`;
-  cellIn.innerHTML=targetUPH.in>0
+  cellIn.innerHTML=tUPH().in>0
     ?`<b>${fmt(tpIn)}</b><span class="tp-sub">TP</span>`
     :`<span class="tp-hint">UPH未入力</span>`;
   // 差異セル更新(処理可能TP − ターゲットUNIT)
@@ -1890,8 +1905,8 @@ function refreshTP(){
     cell.className="diff-cell "+cls;
     cell.innerHTML=`<b>${sign}${fmt(Math.abs(d))}</b><span class="diff-sub">${d>0?'余力':(d<0?'不足':'同数')}</span>`;
   };
-  updateDiff("diffOut",tpOut,targetUPH.out,targetUnit.out);
-  updateDiff("diffIn",tpIn,targetUPH.in,targetUnit.in);
+  updateDiff("diffOut",tpOut,tUPH().out,tUnit().out);
+  updateDiff("diffIn",tpIn,tUPH().in,tUnit().in);
 }
 
 document.addEventListener("keydown",e=>{
@@ -2303,7 +2318,7 @@ function wipeAll(){
   }
   localStorage.removeItem("haichi3_lastCheck");
   localStorage.setItem("haichi3_wiped","1");  // 次回起動時の表示をクリーンに
-  layout={};floorMove={};nameOverride={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={out:0,in:0};targetUnit={out:0,in:0};targetFcst={out:0,in:0};summaryNote="";
+  layout={};floorMove={};nameOverride={};deletedSections={OUT:[],IN:[],ICQA:[]};targetUPH={日勤:{out:0,in:0},夜勤:{out:0,in:0}};targetUnit={日勤:{out:0,in:0},夜勤:{out:0,in:0}};targetFcst={日勤:{out:0,in:0},夜勤:{out:0,in:0}};summaryNote={日勤:"",夜勤:""};
   alert("削除しました。ページを再読み込みします。");
   location.reload();
 }
