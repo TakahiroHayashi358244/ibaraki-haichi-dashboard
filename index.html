@@ -60,21 +60,22 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .mc-sec-lbl{font-size:8px;font-weight:800;display:flex;gap:3px;letter-spacing:.04em;text-transform:uppercase;align-items:center}
 .mc-sec-lbl .n{background:rgba(0,0,0,.1);padding:0 4px;border-radius:5px;font-size:8px;color:inherit}
 .mc-cards{display:flex;flex-wrap:wrap;gap:2px;align-content:flex-start;min-height:14px}
-/* 全フロアビュー内のカードは「丸バッジのみ」表示 ── 役職アバターのみ見せる */
+/* 全フロアビュー内のカードは「丸バッジのみ」表示 ── 会社色の丸(会社頭文字)のみ見せる */
 .multi-mode .mc-cards .card,.multi-mode .mw-cards .card{
   padding:0!important;margin:0!important;border:none!important;background:transparent!important;
   width:24px!important;height:24px!important;border-left:none!important;box-shadow:none!important;
-  border-radius:50%!important;position:relative;cursor:pointer;overflow:visible
+  border-radius:50%!important;position:relative;cursor:pointer;overflow:visible;gap:0!important
 }
 .multi-mode .mc-cards .card:hover,.multi-mode .mw-cards .card:hover{transform:scale(1.18);z-index:5}
-.multi-mode .mc-cards .card .av,.multi-mode .mw-cards .card .av{
-  position:static!important;width:24px!important;height:24px!important;font-size:11px;border-width:2px;border-color:var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.18)
+.multi-mode .mc-cards .card .co,.multi-mode .mw-cards .card .co{
+  width:24px!important;height:24px!important;border-radius:50%!important;display:flex;align-items:center;justify-content:center;
+  font-size:11px;padding:0!important;border:2px solid var(--panel);box-shadow:0 1px 3px rgba(0,0,0,.18)
 }
-.multi-mode .mc-cards .card .role,.multi-mode .mc-cards .card .name,.multi-mode .mc-cards .card .badges,
-.multi-mode .mw-cards .card .role,.multi-mode .mw-cards .card .name,.multi-mode .mw-cards .card .badges{display:none!important}
-/* admin の管理者リング ── multi モードでは黒地に白文字+黄色リングで強調 */
+.multi-mode .mc-cards .card .name,.multi-mode .mc-cards .card .badges,
+.multi-mode .mw-cards .card .name,.multi-mode .mw-cards .card .badges{display:none!important}
+/* admin の管理者リング ── multi モードでは黄色リングで強調 */
 .multi-mode .mc-cards .card.admin,.multi-mode .mw-cards .card.admin{box-shadow:0 0 0 2px #fbbf24!important}
-.multi-mode .mc-cards .card.admin .av,.multi-mode .mw-cards .card.admin .av{background:#000!important;color:#fff!important;border-color:#fbbf24!important}
+.multi-mode .mc-cards .card.admin .co,.multi-mode .mw-cards .card.admin .co{border-color:#fbbf24!important}
 .multi-mode .mc-cards .card.admin .admin-mark,.multi-mode .mw-cards .card.admin .admin-mark{display:none}
 /* 待機エリア (右側、5フロア通し) */
 .multi-wait{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
@@ -182,8 +183,6 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 /* 管理者カード ── 金色リングで識別、王冠アイコン */
 .card.admin{box-shadow:0 0 0 2px #fbbf24,0 2px 8px rgba(245,158,11,.25);background:linear-gradient(180deg,#fffbeb 0%,var(--panel) 30%)}
 .card.admin:hover{box-shadow:0 0 0 2px #f59e0b,0 6px 18px rgba(245,158,11,.35)}
-.card.admin .admin-mark{position:absolute;top:-8px;left:-4px;background:#f59e0b;color:#fff;font-size:9px;font-weight:800;padding:1px 5px;border-radius:8px;border:2px solid var(--panel);letter-spacing:.04em;line-height:1.3}
-.admin-mark::before{content:"👑 ";font-size:9px}
 .setting-item{padding:14px 0;border-bottom:1px solid var(--line)}
 .setting-item:last-child{border-bottom:none}
 .setting-item.danger .setting-lbl{color:#dc2626}
@@ -211,7 +210,7 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .hitchip:hover .hf{color:#fff}
 .hitchip.here{border-style:dashed;cursor:default;opacity:.7}
 .hitchip.here:hover{background:#fff;color:var(--txt);border-color:rgba(232,130,12,.5)}
-.places{display:grid;grid-template-columns:1.5fr 1.5fr .9fr 170px;gap:12px}
+.places{display:grid;grid-template-columns:2.1fr 1fr .45fr 150px;gap:12px}
 @media(max-width:1200px){.places{grid-template-columns:1fr 1fr}}
 @media(max-width:680px){.places{grid-template-columns:1fr}}
 .place{background:var(--floor-panel,var(--panel));border:1px solid var(--line);border-radius:13px;overflow:hidden;display:flex;flex-direction:column}
@@ -235,11 +234,25 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 /* セクション小枠 — 色は JS で動的付与 */
 .sec{border:1px solid;border-radius:9px;padding:7px 8px 8px;min-height:46px;transition:.12s}
 .sec.dragover{box-shadow:0 0 0 2px rgba(232,130,12,.45);filter:brightness(.97)}
+/* Pick ゾーンレイアウト */
+.pick-wrap{padding:6px 7px 7px}
+.pz-top{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start;margin-top:5px}
+.pz-col{display:flex;flex-direction:column;gap:6px}
+.pz-grp{border:1px solid;border-radius:8px;padding:5px}
+.pz-grid{display:grid;gap:5px}
+.pz-grid.c1{grid-template-columns:1fr}.pz-grid.c2{grid-template-columns:1fr 1fr}.pz-grid.c3{grid-template-columns:1fr 1fr 1fr}
+.pz-red-split{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.pz-red-left{display:grid;grid-template-rows:1fr 1fr;gap:5px}
+.pz-zone{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:6px;min-height:60px;padding:20px 5px 5px;transition:.12s}
+.pz-zone.tall{min-height:104px}
+.pz-zone.dragover{box-shadow:0 0 0 2px rgba(232,130,12,.55);border-color:var(--accent);background:rgba(232,130,12,.08)}
+.pz-lab{position:absolute;top:4px;left:5px;font-size:11px;font-weight:800;color:#fff;border-radius:4px;padding:1px 6px;line-height:1.4;letter-spacing:.02em}
+.pz-cards{gap:4px}
 .sec-lbl{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
 .sec-lbl .n{font-weight:800}
-.cards{display:flex;flex-wrap:wrap;gap:7px;min-height:14px}
-.card{position:relative;width:116px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 8px 7px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05);touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
-.card:hover{transform:translateY(-2px);box-shadow:0 5px 14px rgba(0,0,0,.12)}
+.cards{display:flex;flex-wrap:wrap;gap:5px;min-height:14px}
+.card{position:relative;display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent2);border-radius:0;padding:4px 7px 4px 6px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05);touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
+.card:hover{transform:translateY(-1px);box-shadow:0 4px 11px rgba(0,0,0,.13)}
 .card.dragging{opacity:.4;cursor:grabbing}
 .ghost-card{position:fixed!important;left:0;top:0;pointer-events:none;opacity:.92;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,.35);transform:scale(1.04);transition:none!important;margin:0!important}
 .ghost-card:hover{transform:scale(1.04)!important;box-shadow:0 12px 32px rgba(0,0,0,.35)!important}
@@ -247,18 +260,21 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .drag-hint .dh-arrow{font-size:15px;margin-right:3px}
 .drag-hint b{font-size:14px;color:#fff;font-weight:800}
 body.dragging-active{cursor:grabbing}
+.floor-menu{position:fixed;z-index:10001;background:var(--panel);border:1px solid var(--line);border-radius:9px;box-shadow:0 8px 26px rgba(0,0,0,.22);padding:5px;min-width:120px;display:flex;flex-direction:column;gap:2px}
+.floor-menu .fm-hd{font-size:10px;font-weight:800;color:var(--sub);letter-spacing:.05em;text-transform:uppercase;padding:3px 6px 4px}
+.floor-menu .fm-it{font-family:inherit;font-size:13px;font-weight:700;text-align:left;border:none;background:transparent;color:var(--txt);padding:6px 8px;border-radius:6px;cursor:pointer}
+.floor-menu .fm-it:hover{background:var(--panel2)}
+.floor-menu .fm-it.cur{color:var(--accent2)}
 body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-.card .role{font-size:8.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px}
-.card .role.Supervisor{color:#d97706}.card .role.Manager{color:#059669}.card .role.Reader{color:#2563eb}.card .role.Operator{color:#64748b}.card .role.Observer{color:#7c3aed}
-.card .name{font-size:13px;font-weight:700;line-height:1.2;word-break:break-all}
-.card .badges{display:flex;gap:3px;margin-top:5px;flex-wrap:nowrap;align-items:center;overflow:hidden}
-.badge{font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:4px;flex-shrink:0;white-space:nowrap}
+.card .name{font-size:13px;font-weight:700;line-height:1.1;white-space:nowrap}
+.card .co{font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;flex-shrink:0;line-height:1.4}
+.card .badges{display:flex;gap:3px;align-items:center;flex-shrink:0}
+.badge{font-size:9px;font-weight:800;padding:1px 4px;border-radius:4px;flex-shrink:0;white-space:nowrap}
 .badge.fork{background:var(--fork);color:#fff}
 .badge.day{background:#dbeafe;color:#1d4ed8}
 .badge.night{background:#1e293b;color:#fff}
-.badge.batch{font-family:Consolas,monospace;letter-spacing:.02em;cursor:default}
-.fsel{font-size:9px;font-weight:700;border:1px solid var(--line);border-radius:4px;background:var(--panel2);color:var(--sub);padding:1px 0 1px 2px;font-family:inherit;cursor:pointer;margin-left:auto;flex-shrink:0;max-width:42px;min-width:0}
-.card .av{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;background:var(--accent2);border:2px solid var(--panel)}
+.card .admin-mark{position:absolute;top:-7px;left:-6px;width:15px;height:15px;display:flex;align-items:center;justify-content:center;background:#f59e0b;border-radius:50%;border:1.5px solid var(--panel);font-size:8px;line-height:1;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.card.admin{box-shadow:0 0 0 2px #fbbf24,0 1px 2px rgba(245,158,11,.25)}
 .legend{display:flex;gap:13px;padding:0 20px 22px;font-size:11px;color:var(--sub);flex-wrap:wrap;align-items:center}
 .legend span{display:flex;align-items:center;gap:5px}
 .sw{width:11px;height:11px;border-radius:3px}
@@ -690,6 +706,43 @@ const ROLE_ORDER={Supervisor:0,Manager:1,Reader:2,Operator:3,Observer:4};
 // セクション小枠のカラーパレット（工程ごとに色相を振る）
 const PALETTE=["#e8820c","#0f9d8f","#7c3aed","#2563eb","#db2777","#16a34a","#d97706","#0891b2","#9333ea","#dc2626","#0d9488","#4f46e5","#ca8a04","#be123c","#15803d"];
 let secColor={};
+// Pick ゾーンレイアウト定義(全フロア共通・固定) ── OUT枠内のPickをゾーン枠の入れ子で描画
+// group: 色グループ / cols: ゾーングリッド列数 / zones: ゾーン名配列 / special: 特殊配置キー
+// fullwidth: 上段(左右2列)とは別に最下段フル幅で描画
+const PICK_ZONE_LAYOUT={
+  enabled:true,
+  secName:"Pick",
+  top:[
+    {side:"left",groups:[
+      {color:"#639922",bg:"#eaf3de",cols:2,zones:["R","Q","N","M"]},
+      {color:"#185fa5",bg:"#e6f1fb",cols:1,zones:["L"]}
+    ]},
+    {side:"right",groups:[
+      {color:"#a32d2d",bg:"#fcebeb",special:"red-split",zones:["J","H","G"]},
+      {color:"#854f0b",bg:"#faeeda",cols:3,zones:["F","E","C"]}
+    ]}
+  ],
+  bottom:[
+    {color:"#5f5e5a",bg:"transparent",cols:2,zones:["A","B"]}
+  ]
+};
+// 全ゾーン名をフラットに取得
+function pickZoneNames(){
+  const out=[];
+  PICK_ZONE_LAYOUT.top.forEach(col=>col.groups.forEach(g=>g.zones.forEach(z=>out.push(z))));
+  PICK_ZONE_LAYOUT.bottom.forEach(g=>g.zones.forEach(z=>out.push(z)));
+  return out;
+}
+// loc(="PLACE|SUB")がゾーン統合対象(OUT|Pick)なら、その配下ゾーン(OUT|Pick|R 等)も含めて人を拾う
+function isZonedPickLoc(loc){
+  if(!PICK_ZONE_LAYOUT.enabled)return false;
+  return loc==="OUT|"+PICK_ZONE_LAYOUT.secName;
+}
+function memberMatch(p,loc){
+  const l=locOf(p);
+  if(isZonedPickLoc(loc))return l===loc||l.indexOf(loc+"|")===0;
+  return l===loc;
+}
 function buildColors(){
   secColor={};let i=0;
   ["OUT","IN","ICQA"].forEach(pl=>DB.master[pl].forEach(s=>{secColor[pl+"|"+s]=PALETTE[i++%PALETTE.length]}));
@@ -730,6 +783,13 @@ function locOf(p){
   if(layout[k]!==undefined){
     if(layout[k]==="WAIT")return "WAIT";
     const parts=layout[k].split("|");
+    // Pickゾーン配置 (OUT|Pick|R 等) ── 親工程がマスタにあり、ゾーン名が定義済みなら有効
+    if(parts.length===3){
+      if(DB.master[parts[0]]&&DB.master[parts[0]].includes(parts[1])&&PICK_ZONE_LAYOUT.enabled&&parts[1]===PICK_ZONE_LAYOUT.secName&&pickZoneNames().includes(parts[2]))return layout[k];
+      // ゾーン定義から外れた → 親工程(OUT|Pick)へフォールバック
+      if(DB.master[parts[0]]&&DB.master[parts[0]].includes(parts[1]))return parts[0]+"|"+parts[1];
+      return "WAIT";
+    }
     if(DB.master[parts[0]]&&DB.master[parts[0]].includes(parts[1]))return layout[k];
     return "WAIT";  // マスタから消失したセクション → 待機
   }
@@ -1021,6 +1081,11 @@ function renderSingle(root){
     const body=document.createElement("div");body.className="place-body";
     subs.forEach(sub=>{
       const loc=pl==="WAIT"?"WAIT":pl+"|"+sub;
+      // OUT枠の Pick はゾーンレイアウトで描画
+      if(pl==="OUT" && PICK_ZONE_LAYOUT.enabled && sub===PICK_ZONE_LAYOUT.secName){
+        body.appendChild(renderPickZones(pl,sub,pool));
+        return;
+      }
       const col=secColor[loc]||"#94a3b8";
       const mem=pool.filter(p=>locOf(p)===loc).sort(sortPeople);
       const sec=document.createElement("div");sec.className="sec";sec.dataset.loc=loc;
@@ -1036,6 +1101,63 @@ function renderSingle(root){
   root.appendChild(places);
   renderStats(DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor));
   renderLegend();
+}
+// Pick をゾーンレイアウトで描画 ── 返り値は1つの .sec.pick-wrap
+function renderPickZones(pl,sub,pool){
+  const baseLoc=pl+"|"+sub;            // "OUT|Pick"
+  const col=secColor[baseLoc]||"#854f0b";
+  // Pick配下(ゾーン含む)の総数 ── locが "OUT|Pick" で始まる人すべて
+  const pickMem=pool.filter(p=>{const l=locOf(p);return l===baseLoc||l.indexOf(baseLoc+"|")===0});
+  const wrap=document.createElement("div");
+  wrap.className="sec pick-wrap";
+  wrap.style.borderColor=hexToRgba(col,.5);wrap.style.background=hexToRgba(col,.05);
+  wrap.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${pickMem.length?`<span class="n">${pickMem.length}</span>`:'<span class="empty">0</span>'}</div>`;
+  // 1ゾーンの枠を生成
+  const makeZone=(z,gColor,tall)=>{
+    const loc=baseLoc+"|"+z;           // "OUT|Pick|R"
+    const mem=pool.filter(p=>locOf(p)===loc).sort(sortPeople);
+    const zd=document.createElement("div");zd.className="pz-zone"+(tall?" tall":"");zd.dataset.loc=loc;
+    zd.innerHTML=`<span class="pz-lab" style="background:${gColor}">${z}</span>`;
+    const cards=document.createElement("div");cards.className="cards pz-cards";
+    mem.forEach(p=>cards.appendChild(card(p)));
+    zd.appendChild(cards);
+    return zd;
+  };
+  // グループ枠を生成
+  const makeGroup=g=>{
+    const gd=document.createElement("div");gd.className="pz-grp";
+    gd.style.background=g.bg;gd.style.borderColor=g.color;
+    if(g.bg==="transparent"){gd.style.background="var(--panel)";gd.style.borderColor="var(--line)"}
+    if(g.special==="red-split"){
+      // J/H 左2段 + G 右縦長
+      const split=document.createElement("div");split.className="pz-red-split";
+      const left=document.createElement("div");left.className="pz-red-left";
+      left.appendChild(makeZone(g.zones[0],g.color));
+      left.appendChild(makeZone(g.zones[1],g.color));
+      split.appendChild(left);
+      split.appendChild(makeZone(g.zones[2],g.color,true));
+      gd.appendChild(split);
+    }else{
+      const grid=document.createElement("div");grid.className="pz-grid c"+(g.cols||1);
+      g.zones.forEach(z=>grid.appendChild(makeZone(z,g.color)));
+      gd.appendChild(grid);
+    }
+    return gd;
+  };
+  // 上段(左右2列)
+  const top=document.createElement("div");top.className="pz-top";
+  PICK_ZONE_LAYOUT.top.forEach(colDef=>{
+    const colEl=document.createElement("div");colEl.className="pz-col";
+    colDef.groups.forEach(g=>colEl.appendChild(makeGroup(g)));
+    top.appendChild(colEl);
+  });
+  wrap.appendChild(top);
+  // 最下段(フル幅)
+  PICK_ZONE_LAYOUT.bottom.forEach(g=>{
+    const gd=makeGroup(g);gd.style.marginTop="6px";
+    wrap.appendChild(gd);
+  });
+  return wrap;
 }
 function renderMulti(root){
   // 横長フロア行レイアウト ── 縦に5フロア積み重ね、各フロアは OUTBOUND | INBOUND | 待機共通
@@ -1092,7 +1214,7 @@ function renderMulti(root){
 function createMultiSec(f,pl,s,fp){
   const loc=pl+"|"+s;
   const cl=secColor[loc]||"#94a3b8";
-  const mem=fp.filter(p=>locOf(p)===loc).sort(sortPeople);
+  const mem=fp.filter(p=>memberMatch(p,loc)).sort(sortPeople);
   const sec=document.createElement("div");sec.className="sec mc-sec";sec.dataset.loc=loc;
   sec.style.borderColor=hexToRgba(cl,.4);sec.style.background=hexToRgba(cl,.06);
   sec.innerHTML=`<div class="mc-sec-lbl" style="color:${cl}"><span>${s}</span>${mem.length?`<span class="n">${mem.length}</span>`:''}</div>`;
@@ -1107,30 +1229,49 @@ function avatarChar(p){
   if(!n||/^\d+$/.test(n))return (p.role||"?")[0];
   return n[0];
 }
+// 氏名から苗字のみ抽出 ── 全角/半角スペース区切りの先頭。区切りなしはそのまま
+function surnameOf(p){
+  const n=String(p.name||"").trim();
+  if(!n)return p.role||"?";
+  const parts=n.split(/[\s\u3000]+/);
+  return parts[0]||n;
+}
+// 会社頭文字 ── role欄(=会社名運用)の先頭1文字
+function companyChar(p){
+  const r=String(p.role||"").trim();
+  return r?r[0]:"?";
+}
 function card(p){
   const c=document.createElement("div");c.className="card"+(p.admin?" admin":"");
   // multi モード用のメタ情報(丸バッジ表示時のFマーク・夜勤マーク用)
   c.dataset.fork=p.fork?"1":"";
   c.dataset.shift=p.shift||"";
-  // ホバー時のツールチップ(全モード共通)
-  c.title=`${p.role} / ${p.name}`+(p.fork?" (F)":"")+(p.shift==="夜勤"?" (夜勤)":"")+(p.admin?" 👑管理者":"");
+  // ホバー時のツールチップ(全モード共通) ── フルネーム/会社/シフトを補完表示
+  c.title=`${p.role} / ${p.name}`+(p.fork?" (F)":"")+(p.shift==="夜勤"?" (夜勤)":"")+(p.admin?" 👑管理者":"")+"  [ダブルクリックでフロア異動]";
   if(searchQ&&!p.name.includes(searchQ))c.style.opacity=".22";
-  // カードの左ボーダーとアバターを職責色に
+  // 会社色(roleStyle)を左ボーダー・会社バッジに適用 ── 全体表示の丸と同じ配色
   const st=roleStyle(p.role);
-  c.style.borderLeftWidth="4px";
   c.style.borderLeftColor=st.bg;
-  c.style.paddingLeft="5px";
-  const opts=DB.floors.map(f=>`<option value="${f}"${f===floorOf(p)?" selected":""}>${f}</option>`).join("");
-  c.innerHTML=`${p.admin?'<span class="admin-mark">管理者</span>':''}<div class="av" style="background:${st.bg};color:${st.fg}">${avatarChar(p)}</div><div class="role ${p.role}" style="color:${st.bg}">${p.role}</div>
-    <div class="name">${p.name}</div><div class="badges">${p.fork?'<span class="badge fork">F</span>':''}
-    <span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift}</span>
-    <select class="fsel" title="フロア異動">${opts}</select></div>`;
+  c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name">${p.name}</span><span class="co" style="background:${st.bg};color:${st.fg}">${companyChar(p)}</span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
   attachCardDrag(c,p);
-  const sel=c.querySelector(".fsel");
-  // セレクタ操作中はドラッグ開始しない
-  sel.addEventListener("pointerdown",e=>e.stopPropagation());
-  sel.addEventListener("change",e=>{setFloorMove(uidEnc(uid(p)),e.target.value);render()});
+  // フロア異動 ── ダブルクリックでフロア選択メニュー(セレクタ廃止の代替)
+  c.addEventListener("dblclick",e=>{e.preventDefault();e.stopPropagation();openFloorMenu(p,c)});
   return c;
+}
+// フロア異動メニュー(小型カード用) ── ダブルクリックで開く
+let _floorMenu=null;
+function openFloorMenu(p,anchor){
+  if(_floorMenu){_floorMenu.remove();_floorMenu=null}
+  const m=document.createElement("div");m.className="floor-menu";
+  m.innerHTML=`<div class="fm-hd">フロア異動</div>`+DB.floors.map(f=>`<button class="fm-it${f===floorOf(p)?" cur":""}" data-f="${f}">${f}${f===floorOf(p)?" ●":""}</button>`).join("");
+  document.body.appendChild(m);_floorMenu=m;
+  const r=anchor.getBoundingClientRect();
+  let left=Math.min(window.innerWidth-150,Math.max(8,r.left));
+  let top=r.bottom+4; if(top+m.offsetHeight>window.innerHeight-8)top=r.top-m.offsetHeight-4;
+  m.style.left=left+"px";m.style.top=top+"px";
+  m.querySelectorAll(".fm-it").forEach(b=>b.onclick=()=>{setFloorMove(uidEnc(uid(p)),b.dataset.f);_floorMenu.remove();_floorMenu=null;render()});
+  const close=ev=>{if(_floorMenu&&!_floorMenu.contains(ev.target)){_floorMenu.remove();_floorMenu=null;document.removeEventListener("pointerdown",close)}};
+  setTimeout(()=>document.addEventListener("pointerdown",close),0);
 }
 // multi モードでカードをタップ/クリックしたとき、名前を一時的にポップオーバー表示
 let _cardPopover=null;
@@ -1191,11 +1332,12 @@ function attachCardDrag(c,p){
       hint.style.left=(e.clientX+16)+"px";
       hint.style.top=(e.clientY+22)+"px";
     }
-    // ドロップターゲット検出
+    // ドロップターゲット検出 ── Pickゾーン(.pz-zone)も対象。pick-wrap自体は除外
     ghost.style.display="none";
     const under=document.elementFromPoint(e.clientX,e.clientY);
     ghost.style.display="";
-    const sec=under?under.closest(".sec"):null;
+    let sec=under?under.closest(".pz-zone,.sec"):null;
+    if(sec&&sec.classList.contains("pick-wrap"))sec=null;  // Pick親枠への直接ドロップは無効(ゾーンにのみ配置)
     if(sec!==hoverSec){
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(sec)sec.classList.add("dragover");
@@ -1409,8 +1551,12 @@ function openSummary(){
       const plAdmin=fa.filter(p=>locOf(p).split("|")[0]===pl);
       let rows="";
       subs.forEach(s=>{
-        const mem=fp.filter(p=>locOf(p)===pl+"|"+s).sort(sortPeople);
-        const memAdm=fa.filter(p=>locOf(p)===pl+"|"+s).sort(sortPeople);
+        const exact=pl+"|"+s;
+        // Pick はゾーン配置(OUT|Pick|R 等)も合算して1行に集計
+        const isZonedPick=(pl==="OUT" && PICK_ZONE_LAYOUT.enabled && s===PICK_ZONE_LAYOUT.secName);
+        const matchLoc=p=>{const l=locOf(p);return isZonedPick?(l===exact||l.indexOf(exact+"|")===0):(l===exact)};
+        const mem=fp.filter(matchLoc).sort(sortPeople);
+        const memAdm=fa.filter(matchLoc).sort(sortPeople);
         const lhT=lhSum(mem);
         const renderPill=p=>{
           const st=roleStyle(p.role);
@@ -1530,7 +1676,10 @@ function buildMiroData(){
     ["OUT","IN","ICQA"].forEach(pl=>{
       if(!miroPlaceSel.includes(pl))return;  // 未選択の配置はスキップ
       (DB.master[pl]||[]).forEach(s=>{
-        people.filter(p=>floorOf(p)===f && locOf(p)===pl+"|"+s).sort(sortPeople)
+        const exact=pl+"|"+s;
+        const isZonedPick=(pl==="OUT"&&PICK_ZONE_LAYOUT.enabled&&s===PICK_ZONE_LAYOUT.secName);
+        const matchLoc=p=>{const l=locOf(p);return isZonedPick?(l===exact||l.indexOf(exact+"|")===0):(l===exact)};
+        people.filter(p=>floorOf(p)===f && matchLoc(p)).sort(sortPeople)
           .forEach(p=>names.push(p.name+(p.fork?" [F]":"")));
       });
     });
@@ -1764,7 +1913,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.23.8";
+const APP_VERSION="2026.06.29.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -2099,7 +2248,7 @@ function buildPrintHTML(){
       subs.forEach(sub=>{
         const loc=pl+"|"+sub;
         const col=secColor[loc]||"#94a3b8";
-        const mem=fp.filter(p=>locOf(p)===loc).sort(sortPeople);
+        const mem=fp.filter(p=>memberMatch(p,loc)).sort(sortPeople);
         html+=`<div class="print-sec" style="border-color:${hexToRgba(col,.55)};background:${hexToRgba(col,.06)}">`+
           `<div class="print-sec-lbl" style="color:${col}"><span>${esc(sub)}</span><span>${mem.length}</span></div><div class="print-cards">`;
         mem.forEach(p=>{
