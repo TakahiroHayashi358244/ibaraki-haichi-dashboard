@@ -812,7 +812,6 @@ function sortPeople(a,b){return (ROLE_ORDER[a.role]??9)-(ROLE_ORDER[b.role]??9)|
 
 // Firebase書き込み(ローカル即時更新+クラウド送信)
 function setLayout(k,loc){
-  console.log("[setLayout]",{k:k,loc:loc});
   layout[k]=loc;
   if(window.fb)fb.set(fb.rRef("layout/"+k),loc).catch(e=>console.error("setLayout",e));
 }
@@ -1394,7 +1393,6 @@ function attachCardDrag(c,p){
     let sec=under?under.closest(".pz-zone,.sec"):null;
     if(sec&&sec.classList.contains("pick-wrap"))sec=null;  // Pick親枠への直接ドロップは無効(ゾーンにのみ配置)
     if(sec!==hoverSec){
-      console.log("[hover]",sec?{cls:sec.className,loc:sec.dataset.loc}:null);
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(sec)sec.classList.add("dragover");
       hoverSec=sec;
@@ -1410,7 +1408,16 @@ function attachCardDrag(c,p){
       if(ok && hoverSec){
         const loc=hoverSec.dataset.loc;
         const k=uidEnc(uid(p));
-        console.log("[DROP]",{name:p.name,loc:loc,hoverSecClass:hoverSec.className,isConnected:hoverSec.isConnected,datasetLoc:hoverSec.dataset.loc});
+        // ドロップ先のlocが取得できない(dataset.loc未設定の要素等)場合は配置しない ── 消失防止
+        if(!loc){
+          if(hoverSec)hoverSec.classList.remove("dragover");
+          if(ghost){ghost.remove();ghost=null}
+          if(hint){hint.remove();hint=null}
+          c.classList.remove("dragging");
+          document.body.classList.remove("dragging-active");
+          hoverSec=null;active=false;pid=null;
+          return;
+        }
         // 表示上の待機判定 ── layout未設定でマスタ不在のため待機表示中の人も含めて検出
         const wasWait=locOf(p)==="WAIT";
         // multi モード時はドロップ先のフロアカラムを参照、single モード時は curFloor
@@ -1420,7 +1427,7 @@ function attachCardDrag(c,p){
         if(loc!=="WAIT"&&(wasWait||floorOf(p)!==targetFloor)){
           setFloorMove(k,targetFloor);
         }
-        setLayout(k,loc);console.log("[after setLayout] locOf=",locOf(p),"layout[k]=",layout[k]);render();
+        setLayout(k,loc);render();
       }
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(ghost){ghost.remove();ghost=null}
