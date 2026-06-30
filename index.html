@@ -44,7 +44,7 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 /* 全フロアビュー (multi mode) ── 横長フロア行 × OUTBOUND/INBOUND の2列。スクロールなしで1画面に収める */
 .multi-grid{display:grid;grid-template-columns:1fr 120px;gap:5px;padding:5px;height:calc(100vh - 150px);min-height:480px;align-items:stretch}
 .multi-floors{display:grid;grid-template-rows:repeat(var(--multi-rows,5),1fr);gap:4px;min-height:0}
-.floor-row{display:grid;grid-template-columns:48px minmax(0,3fr) minmax(0,5fr) minmax(0,1.4fr);gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;min-height:0}
+.floor-row{display:grid;grid-template-columns:48px minmax(0,3fr) minmax(0,5fr) minmax(0,1.4fr) minmax(0,1.1fr);gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;min-height:0}
 .fr-label{color:#fff;font-weight:800;display:flex;flex-direction:column;justify-content:center;align-items:center;letter-spacing:.02em;font-size:13px;padding:2px}
 .fr-label .fr-n{font-size:9px;background:rgba(255,255,255,.25);padding:1px 5px;border-radius:8px;font-weight:700;margin-top:2px}
 .fr-area{display:flex;flex-direction:column;min-width:0;min-height:0;padding:2px;overflow:hidden}
@@ -52,6 +52,9 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .fr-area-head.OUT{background:#f97316}
 .fr-area-head.IN{background:#0d9488}
 .fr-area-head.ICQA{background:#7c3aed}
+.fr-area-head.other{background:#5f5e5a}
+.fr-area-head .fr-area-n{margin-left:5px;background:rgba(255,255,255,.28);border-radius:7px;padding:0 5px;font-size:8px}
+.fr-other-sec{flex:1;min-height:0}
 .fr-secs{display:flex;flex-wrap:wrap;gap:3px;align-items:flex-start;min-height:0;overflow:auto;flex:1}
 .fr-secs::-webkit-scrollbar{width:5px;height:5px}
 .fr-secs::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
@@ -213,12 +216,15 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .hitchip:hover .hf{color:#fff}
 .hitchip.here{border-style:dashed;cursor:default;opacity:.7}
 .hitchip.here:hover{background:#fff;color:var(--txt);border-color:rgba(232,130,12,.5)}
-.places{display:grid;grid-template-columns:2.1fr 1fr .45fr 150px;gap:12px}
+.places{display:grid;grid-template-columns:2.1fr 1fr .55fr 150px;gap:12px;align-items:start}
+.icqa-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.place.other .place-head{background:#5f5e5a}
+.place.other .sec{min-height:60px}
 @media(max-width:1200px){.places{grid-template-columns:1fr 1fr}}
 @media(max-width:680px){.places{grid-template-columns:1fr}}
 .place{background:var(--floor-panel,var(--panel));border:1px solid var(--line);border-radius:13px;overflow:hidden;display:flex;flex-direction:column}
 .place-head{padding:9px 14px;font-weight:800;font-size:14px;letter-spacing:.05em;display:flex;align-items:center;gap:8px;color:#fff}
-.place-head.OUT{background:var(--out)}.place-head.IN{background:var(--in)}.place-head.ICQA{background:var(--icqa)}.place-head.WAIT{background:var(--wait)}
+.place-head.OUT{background:var(--out)}.place-head.IN{background:var(--in)}.place-head.ICQA{background:var(--icqa)}.place-head.WAIT{background:var(--wait)}.place-head.other{background:#5f5e5a}
 .place-head.WAIT{flex-direction:column;align-items:stretch;gap:5px;padding:8px 12px}
 .place-head.WAIT .ph-row{display:flex;align-items:center;gap:8px}
 .place-head.WAIT .all-floors-mark{align-self:flex-start;margin-left:0}
@@ -397,7 +403,7 @@ footer{padding:12px 20px;color:var(--sub);font-size:11px;border-top:1px solid va
 .print-head .pf{color:#fff;font-weight:800;font-size:16px;padding:3px 14px;border-radius:6px}
 .print-head .pt{font-size:14px;color:#444;font-weight:700}
 .print-head .pn{margin-left:auto;font-size:12px;color:#666}
-.print-places{display:grid;grid-template-columns:1.5fr 1.5fr .85fr;gap:8px;width:100%}
+.print-places{display:grid;grid-template-columns:1.5fr 1.5fr .85fr .7fr;gap:8px;width:100%}
 .print-place{border:1px solid #bbb;border-radius:8px;overflow:hidden;min-width:0}
 .print-place-head{color:#fff;font-weight:800;font-size:13px;padding:5px 10px;display:flex;justify-content:space-between}
 .print-place-head.OUT{background:#e8820c}.print-place-head.IN{background:#0f9d8f}.print-place-head.ICQA{background:#7c3aed}
@@ -508,7 +514,7 @@ input[type=file]{display:none}
           <div>
             <label>配置</label>
             <select id="addPlace" onchange="syncAddSec()">
-              <option>OUT</option><option>IN</option><option>ICQA</option><option value="WAIT">待機/欠勤</option>
+              <option>OUT</option><option>IN</option><option>ICQA</option><option value="other">other</option><option value="WAIT">待機/欠勤</option>
             </select>
           </div>
         </div>
@@ -728,7 +734,9 @@ input[type=file]{display:none}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 let DB={people:[],master:{OUT:[],IN:[],ICQA:[]},floors:["6F","5F","4F","3F","2F"]};
-const PLACES=["OUT","IN","ICQA","WAIT"];
+const PLACES=["OUT","IN","ICQA","other","WAIT"];
+// 工程を持たない単一箱のPLACE(WAIT=待機, other=その他稼働枠)
+const BOX_PLACES=["other","WAIT"];
 const ROLE_ORDER={Supervisor:0,Manager:1,Reader:2,Operator:3,Observer:4};
 // セクション小枠のカラーパレット（工程ごとに色相を振る）
 const PALETTE=["#e8820c","#0f9d8f","#7c3aed","#2563eb","#db2777","#16a34a","#d97706","#0891b2","#9333ea","#dc2626","#0d9488","#4f46e5","#ca8a04","#be123c","#15803d"];
@@ -774,6 +782,7 @@ function buildColors(){
   secColor={};let i=0;
   ["OUT","IN","ICQA"].forEach(pl=>DB.master[pl].forEach(s=>{secColor[pl+"|"+s]=PALETTE[i++%PALETTE.length]}));
   secColor["WAIT"]="#94a3b8";
+  secColor["other"]="#5f5e5a";
 }
 function hexToRgba(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
 
@@ -827,6 +836,7 @@ function locOf(p){
   const k=uidEnc(uid(p));
   if(layout[k]!==undefined){
     if(layout[k]==="WAIT")return "WAIT";
+    if(layout[k]==="other")return "other";  // その他稼働枠(工程なし箱)
     const parts=layout[k].split("|");
     // Pickゾーン配置 (OUT|Pick|R 等) ── 親工程がマスタにあり、ゾーン名が定義済みなら有効
     if(parts.length===3){
@@ -1123,15 +1133,20 @@ function renderSingle(root){
   // 待機/欠勤は階層に関係なく当該シフトの全員から
   const allWait=DB.people.filter(p=>p.shift===curShift && locOf(p)==="WAIT");
   const places=document.createElement("div");places.className="places";
-  PLACES.forEach(pl=>{
+  // 1つのPLACE枠(.place)を生成して返す
+  const buildPlace=pl=>{
     const place=document.createElement("div");place.className="place "+pl;
-    const subs=pl==="WAIT"?["待機/欠勤"]:DB.master[pl];
+    const isBox=BOX_PLACES.includes(pl);          // 工程なし箱(WAIT/other)
+    const subs=pl==="WAIT"?["待機/欠勤"]:(pl==="other"?["other"]:DB.master[pl]);
     const pool = pl==="WAIT" ? allWait : visible;
     const pcount = pl==="WAIT" ? allWait.length : visible.filter(p=>locOf(p).split("|")[0]===pl).length;
-    place.innerHTML=`<div class="place-head ${pl}">${pl==="WAIT"?'<div class="ph-row"><span>待機 / 欠勤</span><span class="pc">'+pcount+'</span></div><span class="all-floors-mark">全フロア</span>':pl+'<span class="pc">'+pcount+'</span>'}</div>`;
+    const headLabel = pl==="WAIT"
+      ? '<div class="ph-row"><span>待機 / 欠勤</span><span class="pc">'+pcount+'</span></div><span class="all-floors-mark">全フロア</span>'
+      : (pl==="other" ? 'other<span class="pc">'+pcount+'</span>' : pl+'<span class="pc">'+pcount+'</span>');
+    place.innerHTML=`<div class="place-head ${pl}">${headLabel}</div>`;
     const body=document.createElement("div");body.className="place-body";
     subs.forEach(sub=>{
-      const loc=pl==="WAIT"?"WAIT":pl+"|"+sub;
+      const loc=pl==="WAIT"?"WAIT":(pl==="other"?"other":pl+"|"+sub);
       // OUT枠の Pick はゾーンレイアウトで描画
       if(pl==="OUT" && PICK_ZONE_LAYOUT.enabled && sub===PICK_ZONE_LAYOUT.secName){
         body.appendChild(renderPickZones(pl,sub,pool));
@@ -1141,14 +1156,25 @@ function renderSingle(root){
       const mem=pool.filter(p=>locOf(p)===loc).sort(sortPeople);
       const sec=document.createElement("div");sec.className="sec";sec.dataset.loc=loc;
       sec.style.borderColor=hexToRgba(col,.5);sec.style.background=hexToRgba(col,.07);
-      sec.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${mem.length?`<span class="n">${mem.length}</span>`:'<span class="empty">0</span>'}</div>`;
+      // otherは工程名ラベルを出さず箱だけ(WAITと同様)
+      const lblText = pl==="other" ? "" : `<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${mem.length?`<span class="n">${mem.length}</span>`:'<span class="empty">0</span>'}</div>`;
+      sec.innerHTML=lblText;
       const cards=document.createElement("div");cards.className="cards";
       mem.forEach(p=>cards.appendChild(card(p)));
       sec.appendChild(cards);
       body.appendChild(sec);
     });
-    place.appendChild(body);places.appendChild(place);
-  });
+    place.appendChild(body);
+    return place;
+  };
+  // OUT / IN を通常配置、ICQA+other を縦積みラッパーに、WAIT を通常配置
+  ["OUT","IN"].forEach(pl=>places.appendChild(buildPlace(pl)));
+  // ICQA列: ICQAの下にotherを縦積み
+  const icqaCol=document.createElement("div");icqaCol.className="icqa-col";
+  icqaCol.appendChild(buildPlace("ICQA"));
+  icqaCol.appendChild(buildPlace("other"));
+  places.appendChild(icqaCol);
+  places.appendChild(buildPlace("WAIT"));
   root.appendChild(places);
   renderStats(DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor));
   renderLegend();
@@ -1257,6 +1283,15 @@ function renderMulti(root){
     DB.master.ICQA.forEach(s=>{icqaSecs.appendChild(createMultiSec(f,"ICQA",s,fp))});
     icqaArea.appendChild(icqaSecs);
     row.appendChild(icqaArea);
+    // other 部 ─ ICQAの右(工程なし箱)
+    const otherArea=document.createElement("div");otherArea.className="fr-area fr-other";
+    const otherMem=fp.filter(p=>locOf(p)==="other").sort(sortPeople);
+    otherArea.innerHTML=`<div class="fr-area-head other">other${otherMem.length?'<span class="fr-area-n">'+otherMem.length+'</span>':''}</div>`;
+    const otherSec=document.createElement("div");otherSec.className="sec fr-other-sec";otherSec.dataset.loc="other";
+    const otherCards=document.createElement("div");otherCards.className="cards mc-cards";
+    otherMem.forEach(p=>otherCards.appendChild(card(p)));
+    otherSec.appendChild(otherCards);otherArea.appendChild(otherSec);
+    row.appendChild(otherArea);
     floorsArea.appendChild(row);
   });
   grid.appendChild(floorsArea);
@@ -1588,22 +1623,22 @@ function openSummary(){
       `</div>`;
   }
   // 全フロア合計の早見表 ── 「管理者」列を追加
-  html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">実稼働 合計</th><th class="admin-col" rowspan="2">👑<br>管理者</th></tr><tr><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th class="rowtot">HC</th><th class="rowtot">LH</th></tr>`;
+  html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">other</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">実稼働 合計</th><th class="admin-col" rowspan="2">👑<br>管理者</th></tr><tr><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th class="rowtot">HC</th><th class="rowtot">LH</th></tr>`;
   DB.floors.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
     const fpAct=fp.filter(p=>locOf(p)!=="WAIT");  // 稼働者のみ(待機/欠勤を除外)
     const fa=adminP.filter(p=>floorOf(p)===f);
-    const grp=pl=>pl==="WAIT"?fp.filter(p=>locOf(p)==="WAIT"):fp.filter(p=>locOf(p).split("|")[0]===pl);
+    const grp=pl=>(pl==="WAIT"||pl==="other")?fp.filter(p=>locOf(p)===pl):fp.filter(p=>locOf(p).split("|")[0]===pl);
     const h=floorHue(f);
     const empty=fp.length===0&&fa.length===0;
-    const tds=["OUT","IN","ICQA","WAIT"].map(pl=>{
+    const tds=["OUT","IN","ICQA","other","WAIT"].map(pl=>{
       const g=grp(pl);return `<td class="${g.length?'has':'z'}">${g.length}</td><td class="${g.length?'lh':'z'}">${g.length?fmtLH(lhSum(g)):0}</td>`;
     }).join("");
     html+=`<tr${empty?' class="emptyrow"':''}><td class="secname" style="border-left:5px solid hsl(${h},60%,50%)">${f}</td>${tds}<td class="rowtot">${fpAct.length}</td><td class="rowtot">${fpAct.length?fmtLH(lhSum(fpAct)):0}</td><td class="admin-col">${fa.length||'<span class="z">0</span>'}</td></tr>`;
   });
-  const allgrp=pl=>pl==="WAIT"?v.filter(p=>locOf(p)==="WAIT"):v.filter(p=>locOf(p).split("|")[0]===pl);
+  const allgrp=pl=>(pl==="WAIT"||pl==="other")?v.filter(p=>locOf(p)===pl):v.filter(p=>locOf(p).split("|")[0]===pl);
   const vAct=v.filter(p=>locOf(p)!=="WAIT");  // 全フロアの稼働者のみ(待機/欠勤を除外)
-  const alltds=["OUT","IN","ICQA","WAIT"].map(pl=>{const g=allgrp(pl);return `<td>${g.length}</td><td>${fmtLH(lhSum(g))}</td>`}).join("");
+  const alltds=["OUT","IN","ICQA","other","WAIT"].map(pl=>{const g=allgrp(pl);return `<td>${g.length}</td><td>${fmtLH(lhSum(g))}</td>`}).join("");
   // 全フロア OUT/IN の LH合計を取り出す(TP算出に使用)
   const lhOutAll=lhSum(allgrp("OUT"));
   const lhInAll=lhSum(allgrp("IN"));
@@ -1613,35 +1648,35 @@ function openSummary(){
     `<td class="secname">📈 FCST</td>`+
     `<td colspan="2"><input type="number" id="fcstOut" class="fcst-input" min="0" step="1" placeholder="物量" value="${tFcst().out||''}" oninput="onFcstInput('out',this.value)"></td>`+
     `<td colspan="2"><input type="number" id="fcstIn" class="fcst-input" min="0" step="1" placeholder="物量" value="${tFcst().in||''}" oninput="onFcstInput('in',this.value)"></td>`+
-    `<td colspan="6" class="fcst-note">OUT / IN の物量予測(手入力)</td>`+
+    `<td colspan="8" class="fcst-note">OUT / IN の物量予測(手入力)</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ ターゲットUPH 入力行(OUT列・IN列の下にUPH入力欄を配置)
   html+=`<tr class="uph-row">`+
     `<td class="secname">🎯 目標UPH</td>`+
     `<td colspan="2"><input type="number" id="uphOut" class="uph-input" min="0" step="1" placeholder="UPH" value="${tUPH().out||''}" oninput="onUPHInput('out',this.value)"> <span class="uph-unit">/h</span></td>`+
     `<td colspan="2"><input type="number" id="uphIn" class="uph-input" min="0" step="1" placeholder="UPH" value="${tUPH().in||''}" oninput="onUPHInput('in',this.value)"></td>`+
-    `<td colspan="6" class="uph-note">LH合計 × 目標UPH = 出荷可能TP</td>`+
+    `<td colspan="8" class="uph-note">LH合計 × 目標UPH = 出荷可能TP</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ 出荷可能TP 行(OUT/INそれぞれ LH×UPH)
   html+=`<tr class="tp-row">`+
     `<td class="secname">📦 出荷可能TP</td>`+
     `<td colspan="2" id="tpOut" class="tp-cell" data-lh="${lhOutAll}"></td>`+
     `<td colspan="2" id="tpIn" class="tp-cell" data-lh="${lhInAll}"></td>`+
-    `<td colspan="6" class="tp-formula">OUT: LH ${fmtLH(lhOutAll)} ／ IN: LH ${fmtLH(lhInAll)}</td>`+
+    `<td colspan="8" class="tp-formula">OUT: LH ${fmtLH(lhOutAll)} ／ IN: LH ${fmtLH(lhInAll)}</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ ターゲットUNIT数 入力行(OUT列・IN列の下にUNIT入力欄を配置)
   html+=`<tr class="unit-row">`+
     `<td class="secname">🎯 ターゲットUNIT</td>`+
     `<td colspan="2"><input type="number" id="unitOut" class="unit-input" min="0" step="1" placeholder="UNIT" value="${tUnit().out||''}" oninput="onUnitInput('out',this.value)"></td>`+
     `<td colspan="2"><input type="number" id="unitIn" class="unit-input" min="0" step="1" placeholder="UNIT" value="${tUnit().in||''}" oninput="onUnitInput('in',this.value)"></td>`+
-    `<td colspan="6" class="unit-note">処理可能TP − ターゲットUNIT = 差異</td>`+
+    `<td colspan="8" class="unit-note">処理可能TP − ターゲットUNIT = 差異</td>`+
     `<td class="admin-col z"></td></tr>`;
   // ★ 差異 行(処理可能TP − ターゲットUNIT。プラス=余力 / マイナス=不足)
   html+=`<tr class="diff-row">`+
     `<td class="secname">± 差異</td>`+
     `<td colspan="2" id="diffOut" class="diff-cell"></td>`+
     `<td colspan="2" id="diffIn" class="diff-cell"></td>`+
-    `<td colspan="6" class="diff-note">＋ 余力 ／ − 不足</td>`+
+    `<td colspan="8" class="diff-note">＋ 余力 ／ − 不足</td>`+
     `<td class="admin-col z"></td></tr>`;
   html+=`</table>`;
   // ★ 特記事項(手入力・全端末共有) ── フロア別合計ブロックの最下部に枠で配置
@@ -1691,6 +1726,23 @@ function openSummary(){
       html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:60px"><col style="width:55px"><col></colgroup>`+
         `<tr><td class="plh ${pl}">${pl}</td><td class="plh ${pl}">${headHC}名</td><td class="plh ${pl}">LH ${fmtLH(lhSum(plGrp))}</td><td class="plh ${pl}"></td></tr>${rows}</table>`;
     });
+    // other(工程なし箱) ── 稼働枠としてICQAの後に表示
+    const otherMem=fp.filter(p=>locOf(p)==="other");
+    const otherAdm=fa.filter(p=>locOf(p)==="other");
+    if(otherMem.length||otherAdm.length){
+      const renderPill=p=>{
+        const st=roleStyle(p.role);const isInverse=st.fg!=="#fff";
+        const bg=isInverse?st.bg:hexToRgba(st.bg,.16);const fg=isInverse?st.fg:st.bg;const bd=isInverse?st.bg:hexToRgba(st.bg,.35);
+        return `<span class="nm" style="background:${bg};color:${fg};border-color:${bd}">${displayName(p)}${p.fork?' <span class="fk">F</span>':''}</span>`;
+      };
+      const oNames=otherMem.map(renderPill).join("");
+      const oAdmNames=otherAdm.map(p=>`<span class="nm-admin">👑 ${displayName(p)}${p.fork?' <span class="fk">F</span>':''}</span>`).join("");
+      const oCell=[oNames,oAdmNames].filter(Boolean).join(oAdmNames&&oNames?'<span class="nm-sep">/</span>':'')||'<span class="z">—</span>';
+      const oHC=otherMem.length+(otherAdm.length?`<span class="adm-add">+${otherAdm.length}</span>`:'');
+      html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:60px"><col style="width:55px"><col></colgroup>`+
+        `<tr><td class="plh" style="background:#5f5e5a">other</td><td class="plh" style="background:#5f5e5a">${oHC}名</td><td class="plh" style="background:#5f5e5a">LH ${fmtLH(lhSum(otherMem))}</td><td class="plh" style="background:#5f5e5a"></td></tr>`+
+        `<tr><td class="secname">—</td><td class="${otherMem.length?'has':'z'}">${otherMem.length}</td><td class="lh">${fmtLH(lhSum(otherMem))}</td><td class="nmcell">${oCell}</td></tr></table>`;
+    }
     const waitMem=fp.filter(p=>locOf(p)==="WAIT");
     if(waitMem.length){
       const names=waitMem.map(p=>`<span class="nm op">${displayName(p)}</span>`).join("");
@@ -1725,7 +1777,7 @@ function syncSummaryShiftToggle(){
 let miroFloorSel=[];  // 選択中のフロア配列
 let miroPlaceSel=[];  // 選択中の配置配列(OUT/IN/ICQA/WAIT)
 let miroNames=[];     // 直近の出力名前リスト(コピー時のHTML table生成用)
-const MIRO_PLACES=[["OUT","OUT"],["IN","IN"],["ICQA","ICQA"],["WAIT","待機/欠勤"]];
+const MIRO_PLACES=[["OUT","OUT"],["IN","IN"],["ICQA","ICQA"],["other","other"],["WAIT","待機/欠勤"]];
 function openMiroExport(){
   // デフォルトは未選択(フロア・配置とも) ── 何も出力されない状態から始める
   miroFloorSel=[];
@@ -1809,6 +1861,10 @@ function buildMiroData(){
           .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
       });
     });
+    if(miroPlaceSel.includes("other")){
+      people.filter(p=>floorOf(p)===f && locOf(p)==="other").sort(sortPeople)
+        .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
+    }
     if(miroPlaceSel.includes("WAIT")){
       people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople)
         .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
@@ -1978,7 +2034,7 @@ function closeAdd(){document.getElementById("addModal").classList.remove("open")
 function syncAddSec(){
   const pl=document.getElementById("addPlace").value;
   const sec=document.getElementById("addSec");sec.innerHTML="";
-  if(pl==="WAIT"){const o=document.createElement("option");o.value="";o.textContent="(なし)";sec.appendChild(o);sec.disabled=true;return}
+  if(pl==="WAIT"||pl==="other"){const o=document.createElement("option");o.value="";o.textContent="(なし)";sec.appendChild(o);sec.disabled=true;return}
   sec.disabled=false;
   DB.master[pl].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sec.appendChild(o)});
 }
@@ -1989,7 +2045,7 @@ function submitAdd(){
   const shift=document.getElementById("addShift").value;
   const floor=document.getElementById("addFloor").value;
   const place=document.getElementById("addPlace").value;
-  const sub=place==="WAIT"?"":document.getElementById("addSec").value;
+  const sub=(place==="WAIT"||place==="other")?"":document.getElementById("addSec").value;
   const lh=parseFloat(document.getElementById("addLH").value)||0;
   const fork=document.getElementById("addFork").checked;
   // 重複チェック(同名)
@@ -1998,10 +2054,11 @@ function submitAdd(){
   }
   // 新規no = 既存最大+1
   const maxNo=DB.people.reduce((m,p)=>Math.max(m,p.no),0);
-  const newP={no:maxNo+1,role,section:place==="WAIT"?"OUT":place,subsec:sub,floor,name,fork,shift,startT:"",endT:"",lh,batch:"",custom:true};
+  const newP={no:maxNo+1,role,section:(place==="WAIT"||place==="other")?"OUT":place,subsec:sub,floor,name,fork,shift,startT:"",endT:"",lh,batch:"",custom:true};
   DB.people.push(newP);
-  // WAIT配置の場合はlayoutで強制的にWAITに
+  // WAIT/other配置の場合はlayoutで強制
   if(place==="WAIT")setLayout(uidEnc(uid(newP)),"WAIT");
+  else if(place==="other")setLayout(uidEnc(uid(newP)),"other");
   // Firebaseに保存(全端末に伝播)
   pushCustom(newP);
   // 表示更新
@@ -2039,7 +2096,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.29.5";
+const APP_VERSION="2026.06.29.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -2386,6 +2443,18 @@ function buildPrintHTML(){
       });
       html+=`</div></div>`;
     });
+    // other(工程なし箱)
+    const otherMem=fp.filter(p=>locOf(p)==="other").sort(sortPeople);
+    if(otherMem.length){
+      const ocol="#5f5e5a";
+      html+=`<div class="print-place"><div class="print-place-head other" style="background:${ocol}"><span>other</span><span>${otherMem.length}名</span></div><div class="print-place-body">`+
+        `<div class="print-sec" style="border-color:${hexToRgba(ocol,.55)};background:${hexToRgba(ocol,.06)}"><div class="print-cards">`;
+      otherMem.forEach(p=>{
+        const st=roleStyle(p.role);
+        html+=`<div class="print-card" style="border-left:3px solid ${st.bg};padding-left:4px"><div class="pr" style="color:${st.bg}">${esc(p.role)}</div><div class="pnm">${esc(displayName(p))}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
+      });
+      html+=`</div></div></div></div>`;
+    }
     html+=`</div>`; // /print-places
     const w=fp.filter(p=>locOf(p)==="WAIT");
     if(w.length){html+=`<div style="margin-top:6px;font-size:10px;color:#666">待機/欠勤(${w.length}名): ${w.map(p=>esc(displayName(p))).join("、")}</div>`}
