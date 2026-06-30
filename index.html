@@ -150,6 +150,20 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .chk-lbl input{margin:0;cursor:pointer;width:16px;height:16px}
 .frm-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px;padding-top:12px;border-top:1px solid var(--line)}
 .custom-list-wrap{margin-top:18px;padding-top:14px;border-top:1px solid var(--line)}
+.add-history{margin-top:14px;padding-top:12px;border-top:1px dashed var(--line)}
+.add-history .ah-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.add-history .ah-title{font-size:11px;font-weight:800;color:var(--sub);letter-spacing:.04em}
+.add-history .ah-clear{font-family:inherit;font-size:10px;font-weight:700;border:1px solid var(--line);background:var(--panel2);color:var(--sub);border-radius:6px;padding:2px 8px;cursor:pointer}
+.add-history .ah-clear:hover{background:var(--panel)}
+.add-history .ah-chips{display:flex;flex-wrap:wrap;gap:6px}
+.add-history .ah-chip{display:inline-flex;align-items:stretch;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.add-history .ah-main{font-family:inherit;display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:none;background:transparent;padding:5px 9px;cursor:pointer;text-align:left}
+.add-history .ah-main:hover{background:var(--accent2);color:#fff}
+.add-history .ah-main:hover .ah-meta{color:rgba(255,255,255,.85)}
+.add-history .ah-name{font-size:13px;font-weight:700;line-height:1.2}
+.add-history .ah-meta{font-size:10px;color:var(--sub);line-height:1.2}
+.add-history .ah-del{font-family:inherit;border:none;border-left:1px solid var(--line);background:transparent;color:var(--sub);font-size:13px;padding:0 8px;cursor:pointer}
+.add-history .ah-del:hover{background:#fee2e2;color:#dc2626}
 .custom-list-wrap h4{font-size:13px;font-weight:800;margin-bottom:8px;color:var(--sub)}
 .custom-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;margin-bottom:5px;font-size:12px}
 .custom-row .cnm{font-weight:800;color:var(--txt);min-width:90px}
@@ -535,6 +549,7 @@ input[type=file]{display:none}
           <button class="btn" onclick="closeAdd()">キャンセル</button>
           <button class="btn primary" onclick="submitAdd()">追加する</button>
         </div>
+        <div class="add-history" id="addHistory"></div>
       </div>
       <div class="custom-list-wrap" id="customListWrap"></div>
     </div>
@@ -2027,6 +2042,7 @@ function openAdd(){
   document.getElementById("addLH").value=8;
   document.getElementById("addShift").value=curShift;
   renderCustomList();
+  renderAddHistory();
   document.getElementById("addModal").classList.add("open");
   setTimeout(()=>document.getElementById("addName").focus(),50);
 }
@@ -2038,6 +2054,73 @@ function syncAddSec(){
   sec.disabled=false;
   DB.master[pl].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sec.appendChild(o)});
 }
+// ===== カスタム追加の履歴(端末ローカル・共有なし) =====
+const ADD_HIST_KEY="haichi3_addHistory";
+const ADD_HIST_MAX=20;
+function loadAddHistory(){
+  try{const r=localStorage.getItem(ADD_HIST_KEY);return r?JSON.parse(r):[]}catch(e){return []}
+}
+function saveAddHistory(arr){
+  try{localStorage.setItem(ADD_HIST_KEY,JSON.stringify(arr.slice(0,ADD_HIST_MAX)))}catch(e){}
+}
+// 追加内容を履歴に記録(同一内容は先頭へ繰り上げ・重複排除)
+function recordAddHistory(entry){
+  let hist=loadAddHistory();
+  const key=e=>[e.name,e.role,e.shift,e.floor,e.place,e.sub,e.lh,e.fork?1:0].join("|");
+  const k=key(entry);
+  hist=hist.filter(e=>key(e)!==k);
+  hist.unshift(entry);
+  saveAddHistory(hist);
+}
+function removeAddHistory(idx){
+  const hist=loadAddHistory();
+  hist.splice(idx,1);saveAddHistory(hist);renderAddHistory();
+}
+function clearAddHistory(){
+  if(!confirm("追加履歴をすべて削除しますか?(この端末のみ)"))return;
+  saveAddHistory([]);renderAddHistory();
+}
+// 履歴チップを描画
+function renderAddHistory(){
+  const box=document.getElementById("addHistory");if(!box)return;
+  const hist=loadAddHistory();
+  if(!hist.length){box.innerHTML="";return}
+  const placeLabel=e=>e.place==="WAIT"?"待機":(e.place==="other"?"other":(e.sub?e.place+"/"+e.sub:e.place));
+  box.innerHTML=`<div class="ah-head"><span class="ah-title">追加履歴(この端末)</span><button class="ah-clear" onclick="clearAddHistory()">全消去</button></div>`+
+    `<div class="ah-chips">`+hist.map((e,i)=>
+      `<div class="ah-chip" title="クリックで即追加">`+
+      `<button class="ah-main" onclick="addFromHistory(${i})"><span class="ah-name">${e.name}</span><span class="ah-meta">${e.role||"?"} / ${e.shift} / ${e.floor} / ${placeLabel(e)}${e.fork?" / F":""}</span></button>`+
+      `<button class="ah-del" onclick="removeAddHistory(${i})" title="この履歴を削除">×</button>`+
+      `</div>`).join("")+`</div>`;
+}
+// 履歴から即追加
+function addFromHistory(idx){
+  const hist=loadAddHistory();
+  const e=hist[idx];if(!e)return;
+  addPersonEntry(e,true);  // fromHistory=true(履歴の再記録で先頭に繰り上げ)
+}
+// 実際に人を追加する共通処理(submitAdd/addFromHistory共用)
+function addPersonEntry(e,fromHistory){
+  const name=String(e.name||"").trim();
+  if(!name){alert("氏名を入力してください");return}
+  // 重複チェック(同名)
+  if(DB.people.some(p=>p.name===name)){
+    if(!confirm(`「${name}」さんは既に名簿に存在します。それでも追加しますか?`))return;
+  }
+  const place=e.place, sub=(place==="WAIT"||place==="other")?"":(e.sub||"");
+  const maxNo=DB.people.reduce((m,p)=>Math.max(m,p.no),0);
+  const newP={no:maxNo+1,role:e.role||"",section:(place==="WAIT"||place==="other")?"OUT":place,subsec:sub,floor:e.floor,name,fork:!!e.fork,shift:e.shift,startT:"",endT:"",lh:e.lh||0,batch:"",custom:true};
+  DB.people.push(newP);
+  if(place==="WAIT")setLayout(uidEnc(uid(newP)),"WAIT");
+  else if(place==="other")setLayout(uidEnc(uid(newP)),"other");
+  pushCustom(newP);
+  // 履歴に記録(先頭へ)
+  recordAddHistory({name,role:e.role||"",shift:e.shift,floor:e.floor,place,sub,lh:e.lh||0,fork:!!e.fork});
+  renderAddHistory();
+  renderCustomList();
+  render();
+  if(e.floor!==curFloor && e.shift===curShift){curFloor=e.floor;render()}
+}
 function submitAdd(){
   const name=document.getElementById("addName").value.trim();
   if(!name){alert("氏名を入力してください");return}
@@ -2048,26 +2131,11 @@ function submitAdd(){
   const sub=(place==="WAIT"||place==="other")?"":document.getElementById("addSec").value;
   const lh=parseFloat(document.getElementById("addLH").value)||0;
   const fork=document.getElementById("addFork").checked;
-  // 重複チェック(同名)
-  if(DB.people.some(p=>p.name===name)){
-    if(!confirm(`「${name}」さんは既に名簿に存在します。それでも追加しますか?`))return;
-  }
-  // 新規no = 既存最大+1
-  const maxNo=DB.people.reduce((m,p)=>Math.max(m,p.no),0);
-  const newP={no:maxNo+1,role,section:(place==="WAIT"||place==="other")?"OUT":place,subsec:sub,floor,name,fork,shift,startT:"",endT:"",lh,batch:"",custom:true};
-  DB.people.push(newP);
-  // WAIT/other配置の場合はlayoutで強制
-  if(place==="WAIT")setLayout(uidEnc(uid(newP)),"WAIT");
-  else if(place==="other")setLayout(uidEnc(uid(newP)),"other");
-  // Firebaseに保存(全端末に伝播)
-  pushCustom(newP);
-  // 表示更新
+  addPersonEntry({name,role,shift,floor,place,sub,lh,fork},false);
+  // フォームをリセット
   document.getElementById("addName").value="";
   document.getElementById("addFork").checked=false;
   document.getElementById("addLH").value=8;
-  renderCustomList();
-  render();
-  if(floor!==curFloor && shift===curShift){curFloor=floor;render()}
   document.getElementById("addName").focus();
 }
 function renderCustomList(){
@@ -2096,7 +2164,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.29.6";
+const APP_VERSION="2026.06.29.7";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
