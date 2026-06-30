@@ -230,7 +230,7 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .hitchip:hover .hf{color:#fff}
 .hitchip.here{border-style:dashed;cursor:default;opacity:.7}
 .hitchip.here:hover{background:#fff;color:var(--txt);border-color:rgba(232,130,12,.5)}
-.places{display:grid;grid-template-columns:2.1fr 1fr .55fr 150px;gap:12px;align-items:start}
+.places{display:grid;grid-template-columns:minmax(0,1fr) 245px 150px 148px;gap:12px;align-items:start}
 .icqa-col{display:flex;flex-direction:column;gap:12px;min-width:0}
 .place.other .place-head{background:#5f5e5a}
 .place.other .sec{min-height:60px}
@@ -253,9 +253,9 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .btn.pdf:hover{background:#0284c7;color:#fff;border-color:#0284c7}
 .btn.pdf:disabled{opacity:.6;cursor:wait}
 .place-head .pc{margin-left:auto;font-size:11px;font-weight:700;background:rgba(255,255,255,.25);padding:1px 8px;border-radius:10px}
-.place-body{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1}
+.place-body{padding:5px;display:flex;flex-direction:column;gap:7px;flex:1}
 /* セクション小枠 — 色は JS で動的付与 */
-.sec{border:1px solid;border-radius:9px;padding:7px 8px 8px;min-height:46px;transition:.12s}
+.sec{border:1px solid;border-radius:9px;padding:6px 4px 7px;min-height:46px;transition:.12s}
 .sec.dragover{box-shadow:0 0 0 2px rgba(232,130,12,.45);filter:brightness(.97)}
 /* Pick ゾーンレイアウト */
 .pick-wrap{padding:6px 7px 7px}
@@ -276,10 +276,10 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .pz-unassigned.dragover{box-shadow:0 0 0 2px rgba(232,130,12,.55);border-style:solid;background:rgba(232,130,12,.1)}
 .pz-un-lab{display:inline-block;font-size:10px;font-weight:800;color:#9a6611;letter-spacing:.04em;margin-bottom:4px}
 .pz-un-cards{gap:4px}
-.sec-lbl{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
+.sec-lbl{font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;margin:0 2px 5px;display:flex;justify-content:space-between;align-items:center}
 .sec-lbl .n{font-weight:800}
-.cards{display:flex;flex-wrap:wrap;gap:5px;min-height:14px}
-.card{position:relative;display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent2);border-radius:0;padding:4px 7px 4px 6px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05);touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
+.cards{display:flex;flex-wrap:wrap;gap:4px;min-height:14px}
+.card{position:relative;display:inline-flex;align-items:center;gap:4px;width:110px;box-sizing:border-box;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent2);border-radius:0;padding:4px 6px 4px 6px;cursor:grab;transition:.12s;user-select:none;box-shadow:0 1px 2px rgba(0,0,0,.05);touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none}
 .card:hover{transform:translateY(-1px);box-shadow:0 4px 11px rgba(0,0,0,.13)}
 .card.dragging{opacity:.4;cursor:grabbing}
 .ghost-card{position:fixed!important;left:0;top:0;pointer-events:none;opacity:.92;z-index:9999;box-shadow:0 12px 32px rgba(0,0,0,.35);transform:scale(1.04);transition:none!important;margin:0!important}
@@ -304,10 +304,10 @@ body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1p
 .card .name-wrap.ovf .name{width:max-content}
 .card:hover .name-wrap.ovf .name{animation:nmflow linear infinite}
 @keyframes nmflow{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-.card .co{font-size:10px;font-weight:800;padding:1px 5px;border-radius:4px;color:#fff;flex-shrink:0;line-height:1.4}
+.card .co{font-size:9px;font-weight:800;padding:1px 3px;border-radius:3px;color:#fff;flex-shrink:0;line-height:1.4}
 .card .co .co-initial{display:none}
-.card .badges{display:flex;gap:3px;align-items:center;flex-shrink:0}
-.badge{font-size:9px;font-weight:800;padding:1px 4px;border-radius:4px;flex-shrink:0;white-space:nowrap}
+.card .badges{display:flex;gap:2px;align-items:center;flex-shrink:0;margin-left:auto}
+.badge{font-size:9px;font-weight:800;padding:1px 3px;border-radius:3px;flex-shrink:0;white-space:nowrap}
 .badge.fork{background:var(--fork);color:#fff}
 .badge.day{background:#dbeafe;color:#1d4ed8}
 .badge.night{background:#1e293b;color:#fff}
@@ -2164,7 +2164,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.29.7";
+const APP_VERSION="2026.06.30.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
