@@ -253,6 +253,10 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .btn.pdf:hover{background:#0284c7;color:#fff;border-color:#0284c7}
 .btn.pdf:disabled{opacity:.6;cursor:wait}
 .place-head .pc{margin-left:auto;font-size:11px;font-weight:700;background:rgba(255,255,255,.25);padding:1px 8px;border-radius:10px}
+.place-head .pc .pc-lh{opacity:.8;font-weight:600}
+.sec-lbl .lhv{font-weight:600;opacity:.72;font-size:9px;margin-left:1px}
+.pz-nlh{position:absolute;top:4px;right:5px;font-size:8px;font-weight:800;color:var(--sub);opacity:.75}
+.mc-sec-lbl .mc-lh{font-weight:600;opacity:.8}
 .place-body{padding:5px;display:flex;flex-direction:column;gap:7px;flex:1}
 /* セクション小枠 — 色は JS で動的付与 */
 .sec{border:1px solid;border-radius:9px;padding:6px 4px 7px;min-height:46px;transition:.12s}
@@ -313,6 +317,14 @@ body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1p
 .badge.night{background:#1e293b;color:#fff}
 .card .admin-mark{position:absolute;top:-7px;left:-6px;width:15px;height:15px;display:flex;align-items:center;justify-content:center;background:#f59e0b;border-radius:50%;border:1.5px solid var(--panel);font-size:8px;line-height:1;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.2)}
 .card.admin{box-shadow:0 0 0 2px #fbbf24,0 1px 2px rgba(245,158,11,.25)}
+.card.selected{box-shadow:0 0 0 2px #2563eb,0 2px 8px rgba(37,99,235,.3);background:#eff6ff}
+.card.selected.admin{box-shadow:0 0 0 2px #2563eb,0 0 0 4px #fbbf24}
+.ghost-count{position:absolute;top:-8px;right:-8px;min-width:18px;height:18px;padding:0 4px;background:#2563eb;color:#fff;border-radius:9px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.sel-bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9000;background:#1e293b;color:#fff;padding:9px 16px;border-radius:24px;font-size:13px;font-weight:700;display:flex;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.28)}
+.sel-bar .sel-n{background:#2563eb;color:#fff;border-radius:11px;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800}
+.sel-bar .sel-clear{font-family:inherit;font-size:11px;font-weight:700;border:1px solid rgba(255,255,255,.4);background:transparent;color:#fff;border-radius:12px;padding:3px 10px;cursor:pointer}
+.sel-bar .sel-clear:hover{background:rgba(255,255,255,.15)}
+.sel-bar .sel-hint{font-size:11px;font-weight:500;color:rgba(255,255,255,.7)}
 .legend{display:flex;gap:13px;padding:0 20px 22px;font-size:11px;color:var(--sub);flex-wrap:wrap;align-items:center}
 .legend span{display:flex;align-items:center;gap:5px}
 .sw{width:11px;height:11px;border-radius:3px}
@@ -1143,6 +1155,15 @@ function render(){
   if(viewMode==="multi"){renderMulti(root);return}
   renderSingle(root);
 }
+// LH表示の共通ヘルパー
+function fmtLHval(n){return (Math.round(n*10)/10).toString().replace(/\.0$/,"")}
+function lhOf(arr){return arr.reduce((s,p)=>s+(p.lh||0),0)}
+// 枠ヘッダ/ラベル用: "人数・LH" (0人ならLH省略)
+function countLH(mem){
+  const n=mem.length;
+  if(!n)return '<span class="empty">0</span>';
+  return `<span class="n">${n}</span><span class="lhv">・${fmtLHval(lhOf(mem))}</span>`;
+}
 function renderSingle(root){
   const visible=DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor);
   // 待機/欠勤は階層に関係なく当該シフトの全員から
@@ -1154,10 +1175,12 @@ function renderSingle(root){
     const isBox=BOX_PLACES.includes(pl);          // 工程なし箱(WAIT/other)
     const subs=pl==="WAIT"?["待機/欠勤"]:(pl==="other"?["other"]:DB.master[pl]);
     const pool = pl==="WAIT" ? allWait : visible;
-    const pcount = pl==="WAIT" ? allWait.length : visible.filter(p=>locOf(p).split("|")[0]===pl).length;
+    const poolMembers = pl==="WAIT" ? allWait : visible.filter(p=>locOf(p).split("|")[0]===pl);
+    const pcount = poolMembers.length;
+    const pcLH = pcount?`${pcount}<span class="pc-lh">・${fmtLHval(lhOf(poolMembers))}</span>`:'0';
     const headLabel = pl==="WAIT"
-      ? '<div class="ph-row"><span>待機 / 欠勤</span><span class="pc">'+pcount+'</span></div><span class="all-floors-mark">全フロア</span>'
-      : (pl==="other" ? 'other<span class="pc">'+pcount+'</span>' : pl+'<span class="pc">'+pcount+'</span>');
+      ? '<div class="ph-row"><span>待機 / 欠勤</span><span class="pc">'+pcLH+'</span></div><span class="all-floors-mark">全フロア</span>'
+      : (pl==="other" ? 'other<span class="pc">'+pcLH+'</span>' : pl+'<span class="pc">'+pcLH+'</span>');
     place.innerHTML=`<div class="place-head ${pl}">${headLabel}</div>`;
     const body=document.createElement("div");body.className="place-body";
     subs.forEach(sub=>{
@@ -1172,7 +1195,7 @@ function renderSingle(root){
       const sec=document.createElement("div");sec.className="sec";sec.dataset.loc=loc;
       sec.style.borderColor=hexToRgba(col,.5);sec.style.background=hexToRgba(col,.07);
       // otherは工程名ラベルを出さず箱だけ(WAITと同様)
-      const lblText = pl==="other" ? "" : `<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${mem.length?`<span class="n">${mem.length}</span>`:'<span class="empty">0</span>'}</div>`;
+      const lblText = pl==="other" ? "" : `<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${countLH(mem)}</div>`;
       sec.innerHTML=lblText;
       const cards=document.createElement("div");cards.className="cards";
       mem.forEach(p=>cards.appendChild(card(p)));
@@ -1204,12 +1227,12 @@ function renderPickZones(pl,sub,pool){
   const wrap=document.createElement("div");
   wrap.className="sec pick-wrap";
   wrap.style.borderColor=hexToRgba(col,.5);wrap.style.background=hexToRgba(col,.05);
-  wrap.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${pickMem.length?`<span class="n">${pickMem.length}</span>`:'<span class="empty">0</span>'}</div>`;
+  wrap.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${sub}</span>${countLH(pickMem)}</div>`;
   // 未割当(ゾーン未指定でPick直下=locがちょうどbaseLoc)の人を受けるエリア ── ゾーン分割表示で消えないように
   const unassigned=pool.filter(p=>locOf(p)===baseLoc).sort(sortPeople);
   const uz=document.createElement("div");
   uz.className="pz-unassigned";uz.dataset.loc=baseLoc;
-  uz.innerHTML=`<span class="pz-un-lab">未割当</span>`;
+  uz.innerHTML=`<span class="pz-un-lab">未割当 ${unassigned.length?unassigned.length+'・'+fmtLHval(lhOf(unassigned)):''}</span>`;
   const uzCards=document.createElement("div");uzCards.className="cards pz-un-cards";
   unassigned.forEach(p=>uzCards.appendChild(card(p)));
   uz.appendChild(uzCards);
@@ -1220,7 +1243,7 @@ function renderPickZones(pl,sub,pool){
     const loc=baseLoc+"|"+z;           // "OUT|Pick|R"
     const mem=pool.filter(p=>locOf(p)===loc).sort(sortPeople);
     const zd=document.createElement("div");zd.className="pz-zone"+(tall?" tall":"");zd.dataset.loc=loc;
-    zd.innerHTML=`<span class="pz-lab" style="background:${gColor}">${z}</span>`;
+    zd.innerHTML=`<span class="pz-lab" style="background:${gColor}">${z}</span>${mem.length?`<span class="pz-nlh">${mem.length}・${fmtLHval(lhOf(mem))}</span>`:''}`;
     const cards=document.createElement("div");cards.className="cards pz-cards";
     mem.forEach(p=>cards.appendChild(card(p)));
     zd.appendChild(cards);
@@ -1277,23 +1300,26 @@ function renderMulti(root){
     lbl.style.background=`hsl(${h},55%,46%)`;
     lbl.innerHTML=`<span class="fr-name">${f}</span><span class="fr-n">${fp.length}</span>`;
     row.appendChild(lbl);
+    // 各エリアのメンバー集計(人数・LH)
+    const areaMem=pl=>fp.filter(p=>locOf(p).split("|")[0]===pl);
+    const areaTag=mem=>mem.length?`<span class="fr-area-n">${mem.length}・${fmtLHval(lhOf(mem))}</span>`:'';
     // OUTBOUND 部 ─ OUT の各セクション
     const outArea=document.createElement("div");outArea.className="fr-area fr-out";
-    outArea.innerHTML=`<div class="fr-area-head OUT">OUTBOUND</div>`;
+    outArea.innerHTML=`<div class="fr-area-head OUT">OUTBOUND${areaTag(areaMem("OUT"))}</div>`;
     const outSecs=document.createElement("div");outSecs.className="fr-secs";
     DB.master.OUT.forEach(s=>{outSecs.appendChild(createMultiSec(f,"OUT",s,fp))});
     outArea.appendChild(outSecs);
     row.appendChild(outArea);
     // INBOUND 部 ─ IN のセクション
     const inArea=document.createElement("div");inArea.className="fr-area fr-in";
-    inArea.innerHTML=`<div class="fr-area-head IN">INBOUND</div>`;
+    inArea.innerHTML=`<div class="fr-area-head IN">INBOUND${areaTag(areaMem("IN"))}</div>`;
     const inSecs=document.createElement("div");inSecs.className="fr-secs";
     DB.master.IN.forEach(s=>{inSecs.appendChild(createMultiSec(f,"IN",s,fp))});
     inArea.appendChild(inSecs);
     row.appendChild(inArea);
     // ICQA 部 ─ 独立した第3列(品質管理)
     const icqaArea=document.createElement("div");icqaArea.className="fr-area fr-icqa";
-    icqaArea.innerHTML=`<div class="fr-area-head ICQA">ICQA</div>`;
+    icqaArea.innerHTML=`<div class="fr-area-head ICQA">ICQA${areaTag(areaMem("ICQA"))}</div>`;
     const icqaSecs=document.createElement("div");icqaSecs.className="fr-secs";
     DB.master.ICQA.forEach(s=>{icqaSecs.appendChild(createMultiSec(f,"ICQA",s,fp))});
     icqaArea.appendChild(icqaSecs);
@@ -1301,7 +1327,7 @@ function renderMulti(root){
     // other 部 ─ ICQAの右(工程なし箱)
     const otherArea=document.createElement("div");otherArea.className="fr-area fr-other";
     const otherMem=fp.filter(p=>locOf(p)==="other").sort(sortPeople);
-    otherArea.innerHTML=`<div class="fr-area-head other">other${otherMem.length?'<span class="fr-area-n">'+otherMem.length+'</span>':''}</div>`;
+    otherArea.innerHTML=`<div class="fr-area-head other">other${areaTag(otherMem)}</div>`;
     const otherSec=document.createElement("div");otherSec.className="sec fr-other-sec";otherSec.dataset.loc="other";
     const otherCards=document.createElement("div");otherCards.className="cards mc-cards";
     otherMem.forEach(p=>otherCards.appendChild(card(p)));
@@ -1329,7 +1355,7 @@ function createMultiSec(f,pl,s,fp){
   const mem=fp.filter(p=>memberMatch(p,loc)).sort(sortPeople);
   const sec=document.createElement("div");sec.className="sec mc-sec";sec.dataset.loc=loc;
   sec.style.borderColor=hexToRgba(cl,.4);sec.style.background=hexToRgba(cl,.06);
-  sec.innerHTML=`<div class="mc-sec-lbl" style="color:${cl}"><span>${s}</span>${mem.length?`<span class="n">${mem.length}</span>`:''}</div>`;
+  sec.innerHTML=`<div class="mc-sec-lbl" style="color:${cl}"><span>${s}</span>${mem.length?`<span class="n">${mem.length}<span class="mc-lh">・${fmtLHval(lhOf(mem))}</span></span>`:''}</div>`;
   const cards=document.createElement("div");cards.className="cards mc-cards";
   mem.forEach(p=>cards.appendChild(card(p)));
   sec.appendChild(cards);
@@ -1371,6 +1397,8 @@ function card(p){
   c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name-wrap"><span class="name">${dn}</span></span><span class="co" style="background:${st.bg};color:${st.fg}"><span class="co-company">${coChar}</span><span class="co-initial">${nameInitial}</span></span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
   // 名前がはみ出す場合のみマーキー対象に(レンダー後に判定)
   c.dataset.fullname=dn;
+  c.dataset.uidkey=uidEnc(uid(p));
+  if(selectedUids.has(c.dataset.uidkey))c.classList.add("selected");
   attachCardDrag(c,p);
   // フロア異動 ── ダブルクリックでフロア選択メニュー(セレクタ廃止の代替)
   c.addEventListener("dblclick",e=>{e.preventDefault();e.stopPropagation();openFloorMenu(p,c)});
@@ -1435,6 +1463,31 @@ function showCardPopover(p,anchor){
   setTimeout(()=>{if(pop===_cardPopover){pop.remove();_cardPopover=null}},2500);
 }
 // 統一ドラッグ実装 — マウス・タッチ・ペンすべてで動作
+// ===== 複数選択(Ctrl/Cmd+クリック)で一括移動 =====
+const selectedUids=new Set();
+function isSelected(p){return selectedUids.has(uidEnc(uid(p)))}
+function toggleSelect(p){
+  const k=uidEnc(uid(p));
+  if(selectedUids.has(k))selectedUids.delete(k);else selectedUids.add(k);
+  updateSelectionUI();
+}
+function clearSelection(){selectedUids.clear();updateSelectionUI()}
+// 全カードのselectedクラスを現在の選択集合に同期
+function updateSelectionUI(){
+  document.querySelectorAll(".card").forEach(c=>{
+    const k=c.dataset.uidkey;
+    if(k)c.classList.toggle("selected",selectedUids.has(k));
+  });
+  // 選択数バッジ
+  let bar=document.getElementById("selBar");
+  if(selectedUids.size>=1){
+    if(!bar){
+      bar=document.createElement("div");bar.id="selBar";bar.className="sel-bar";
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML=`<span class="sel-n">${selectedUids.size}</span>名を選択中 <button class="sel-clear" onclick="clearSelection()">解除</button><span class="sel-hint">選択したカードをドラッグでまとめて移動</span>`;
+  }else if(bar){bar.remove()}
+}
 function attachCardDrag(c,p){
   let startX=0,startY=0,active=false,ghost=null,hint=null,hoverSec=null,pid=null;
   const TH=6;  // この距離を超えるとドラッグ開始
@@ -1442,23 +1495,45 @@ function attachCardDrag(c,p){
     // セレクタ/ボタン上では発火しない
     if(e.target.closest("select,button,input,.fsel"))return;
     if(e.button!==undefined && e.button!==0)return;  // 左ボタンのみ
+    // Ctrl/Cmd+クリック → 複数選択トグル(ドラッグは開始しない)
+    if(e.ctrlKey||e.metaKey){
+      e.preventDefault();e.stopPropagation();
+      toggleSelect(p);
+      return;
+    }
     pid=e.pointerId;startX=e.clientX;startY=e.clientY;active=false;
     c.setPointerCapture(pid);
   });
+  let dragUids=null;  // この回のドラッグで移動する対象のuidkey配列
   c.addEventListener("pointermove",e=>{
     if(e.pointerId!==pid)return;
     const dx=e.clientX-startX, dy=e.clientY-startY;
     if(!active){
       if(Math.hypot(dx,dy)<TH)return;
       active=true;
-      // ゴーストカード作成
+      // 移動対象を決定 ── 掴んだカードが選択集合に含まれれば選択全員、なければ単独
+      const myKey=uidEnc(uid(p));
+      if(selectedUids.has(myKey)&&selectedUids.size>=2){
+        dragUids=[...selectedUids];
+      }else{
+        dragUids=[myKey];
+        // 選択外のカードを単独ドラッグ → 選択はクリア(誤操作防止)
+        if(selectedUids.size)clearSelection();
+      }
+      // ゴーストカード作成(複数なら枚数バッジ)
       const r=c.getBoundingClientRect();
       ghost=c.cloneNode(true);
       ghost.className="card ghost-card";
       ghost.style.width=r.width+"px";
       ghost.style.height=r.height+"px";
+      if(dragUids.length>=2){
+        const badge=document.createElement("span");
+        badge.className="ghost-count";badge.textContent=dragUids.length;
+        ghost.appendChild(badge);
+      }
       document.body.appendChild(ghost);
-      c.classList.add("dragging");
+      // 移動対象すべてにdraggingクラス
+      dragUids.forEach(k=>{document.querySelectorAll(`.card[data-uidkey="${k}"]`).forEach(el=>el.classList.add("dragging"))});
       document.body.classList.add("dragging-active");
       // 待機からドラッグ時、移動先フロアを大きくヒント表示
       if(locOf(p)==="WAIT"){
@@ -1499,38 +1574,42 @@ function attachCardDrag(c,p){
     if(active){
       if(ok && hoverSec){
         const loc=hoverSec.dataset.loc;
-        const k=uidEnc(uid(p));
-        // ドロップ先のlocが取得できない(dataset.loc未設定の要素等)場合は配置しない ── 消失防止
+        // ドロップ先のlocが取得できない場合は配置しない ── 消失防止
         if(!loc){
           if(hoverSec)hoverSec.classList.remove("dragover");
           if(ghost){ghost.remove();ghost=null}
           if(hint){hint.remove();hint=null}
-          c.classList.remove("dragging");
+          document.querySelectorAll(".card.dragging").forEach(el=>el.classList.remove("dragging"));
           document.body.classList.remove("dragging-active");
-          hoverSec=null;active=false;pid=null;
+          hoverSec=null;active=false;pid=null;dragUids=null;
           return;
         }
-        // 表示上の待機判定 ── layout未設定でマスタ不在のため待機表示中の人も含めて検出
-        const wasWait=locOf(p)==="WAIT";
         // multi モード時はドロップ先のフロアカラムを参照、single モード時は curFloor
         const targetFloor=viewMode==="multi"?
-          (hoverSec.closest(".floor-row")?.dataset.floor||floorOf(p)):curFloor;
-        // フロア異動の判定:待機→工程 or 別フロアの工程へのドロップ
-        if(loc!=="WAIT"&&(wasWait||floorOf(p)!==targetFloor)){
-          setFloorMove(k,targetFloor);
-        }
-        setLayout(k,loc);render();
+          (hoverSec.closest(".floor-row")?.dataset.floor||curFloor):curFloor;
+        // 移動対象すべてに適用
+        const targets=dragUids&&dragUids.length?dragUids:[uidEnc(uid(p))];
+        targets.forEach(k=>{
+          const person=DB.people.find(pp=>uidEnc(uid(pp))===k)||p;
+          const wasWait=locOf(person)==="WAIT";
+          if(loc!=="WAIT"&&(wasWait||floorOf(person)!==targetFloor)){
+            setFloorMove(k,targetFloor);
+          }
+          setLayout(k,loc);
+        });
+        clearSelection();
+        render();
       }
       if(hoverSec)hoverSec.classList.remove("dragover");
       if(ghost){ghost.remove();ghost=null}
       if(hint){hint.remove();hint=null}
-      c.classList.remove("dragging");
+      document.querySelectorAll(".card.dragging").forEach(el=>el.classList.remove("dragging"));
       document.body.classList.remove("dragging-active");
     }else if(ok&&viewMode==="multi"){
       // multi モードで「タップだけ」(=ドラッグせずに離した) → 名前ポップオーバー表示
       showCardPopover(p,c);
     }
-    hoverSec=null;active=false;pid=null;
+    hoverSec=null;active=false;pid=null;dragUids=null;
   };
   c.addEventListener("pointerup",e=>{if(e.pointerId===pid)finish(true)});
   c.addEventListener("pointercancel",e=>{if(e.pointerId===pid)finish(false)});
@@ -2016,6 +2095,7 @@ document.addEventListener("keydown",e=>{
   if(e.key==="Escape"){
     closeSummary();closeSettings();closeAdd();closeMiroExport();closePasteModal();
     if(searchQ)clearSearch();
+    if(selectedUids.size)clearSelection();
   }
 });
 
@@ -2164,7 +2244,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.30.2";
+const APP_VERSION="2026.06.30.4";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -2495,14 +2575,15 @@ function buildPrintHTML(){
     html+=`<div class="print-places">`;
     ["OUT","IN","ICQA"].forEach(pl=>{
       const subs=DB.master[pl];
-      const tot=fp.filter(p=>locOf(p).split("|")[0]===pl).length;
-      html+=`<div class="print-place"><div class="print-place-head ${pl}"><span>${pl}</span><span>${tot}名</span></div><div class="print-place-body">`;
+      const totMem=fp.filter(p=>locOf(p).split("|")[0]===pl);
+      const tot=totMem.length;
+      html+=`<div class="print-place"><div class="print-place-head ${pl}"><span>${pl}</span><span>${tot}名・LH${fmtLHval(lhOf(totMem))}</span></div><div class="print-place-body">`;
       subs.forEach(sub=>{
         const loc=pl+"|"+sub;
         const col=secColor[loc]||"#94a3b8";
         const mem=fp.filter(p=>memberMatch(p,loc)).sort(sortPeople);
         html+=`<div class="print-sec" style="border-color:${hexToRgba(col,.55)};background:${hexToRgba(col,.06)}">`+
-          `<div class="print-sec-lbl" style="color:${col}"><span>${esc(sub)}</span><span>${mem.length}</span></div><div class="print-cards">`;
+          `<div class="print-sec-lbl" style="color:${col}"><span>${esc(sub)}</span><span>${mem.length?mem.length+'・'+fmtLHval(lhOf(mem)):0}</span></div><div class="print-cards">`;
         mem.forEach(p=>{
           const st=roleStyle(p.role);
           html+=`<div class="print-card" style="border-left:3px solid ${st.bg};padding-left:4px"><div class="pr" style="color:${st.bg}">${esc(p.role)}</div><div class="pnm">${esc(displayName(p))}</div>${p.fork?'<span class="pf2">F</span>':''}</div>`;
@@ -2515,7 +2596,7 @@ function buildPrintHTML(){
     const otherMem=fp.filter(p=>locOf(p)==="other").sort(sortPeople);
     if(otherMem.length){
       const ocol="#5f5e5a";
-      html+=`<div class="print-place"><div class="print-place-head other" style="background:${ocol}"><span>other</span><span>${otherMem.length}名</span></div><div class="print-place-body">`+
+      html+=`<div class="print-place"><div class="print-place-head other" style="background:${ocol}"><span>other</span><span>${otherMem.length}名・LH${fmtLHval(lhOf(otherMem))}</span></div><div class="print-place-body">`+
         `<div class="print-sec" style="border-color:${hexToRgba(ocol,.55)};background:${hexToRgba(ocol,.06)}"><div class="print-cards">`;
       otherMem.forEach(p=>{
         const st=roleStyle(p.role);
