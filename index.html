@@ -88,6 +88,10 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .mw-head{display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:800;color:#475569;padding:3px 6px;background:#e2e8f0;border-radius:5px;margin-bottom:5px}
 .mw-head .mw-n{background:#94a3b8;color:#fff;padding:1px 7px;border-radius:9px;font-size:10px}
 .mw-sec{flex:1;overflow:auto;border:1px dashed #cbd5e1;border-radius:5px;padding:4px;background:#fff}
+.mw-nonwork{margin-bottom:5px;border-style:solid}
+.mw-sub-lbl{display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:800;letter-spacing:.04em;margin-bottom:3px}
+.mw-sub-lbl .mw-sub-n{background:currentColor;color:#fff;border-radius:7px;min-width:16px;text-align:center;padding:0 4px}
+.mw-sub-lbl .mw-sub-n{background:rgba(0,0,0,.12);color:inherit}
 .mw-sec.dragover{background:rgba(59,130,246,.12);border-style:solid;border-color:#3b82f6}
 .mw-cards{display:flex;flex-wrap:wrap;gap:3px;align-content:flex-start}
 /* タップで名前ポップオーバー */
@@ -199,6 +203,22 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .qr-actions{display:flex;gap:6px;flex-wrap:wrap}
 .qr-actions .btn{font-size:11px;padding:6px 11px}
 .btn.admin-btn{background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border-color:#d97706;font-weight:700}
+.admin-manual{margin-top:12px;padding:12px;background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);border-radius:9px}
+.admin-manual .am-title{font-size:12px;font-weight:800;color:#b45309;margin-bottom:8px}
+.admin-manual .am-grid{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.admin-manual .am-in{font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel);color:var(--txt)}
+.admin-manual #amName{flex:1.4;min-width:90px}
+.admin-manual #amRole{flex:1.2;min-width:80px}
+.admin-manual .am-lh{width:64px;flex:none}
+.admin-manual .am-add{flex:none;font-weight:700}
+.admin-manual .am-list{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+.admin-manual .am-empty{font-size:11px;color:var(--sub)}
+.admin-manual .am-chip{display:inline-flex;align-items:center;gap:5px;background:var(--panel);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:3px 5px 3px 9px;font-size:12px}
+.admin-manual .am-crown{font-size:11px}
+.admin-manual .am-nm{font-weight:700}
+.admin-manual .am-meta{font-size:10px;color:var(--sub)}
+.admin-manual .am-del{font-family:inherit;border:none;background:transparent;color:var(--sub);font-size:13px;cursor:pointer;padding:0 3px;border-radius:50%}
+.admin-manual .am-del:hover{background:#fee2e2;color:#dc2626}
 .btn.admin-btn:hover{background:linear-gradient(135deg,#d97706,#b45309);color:#fff;border-color:#b45309}
 /* 管理者カード ── 金色リングで識別、王冠アイコン */
 .card.admin{box-shadow:0 0 0 2px #fbbf24,0 2px 8px rgba(245,158,11,.25);background:linear-gradient(180deg,#fffbeb 0%,var(--panel) 30%)}
@@ -245,7 +265,7 @@ header{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1p
 .all-floors-mark{font-size:9px;font-weight:700;background:rgba(255,255,255,.3);padding:1px 6px;border-radius:8px;margin-left:6px;letter-spacing:.05em}
 /* 待機/欠勤エリアは枠全体をドロップゾーンに */
 .place.WAIT .place-body{flex:1}
-.place.WAIT .sec{flex:1;min-height:140px;display:flex;flex-direction:column}
+.place.WAIT .sec{flex:1;min-height:90px;display:flex;flex-direction:column}
 .place.WAIT .sec .cards{flex:1;align-content:flex-start}
 /* PDF出力ボタン以降は右端寄せ */
 .toolbar .btn.pdf{margin-left:auto}
@@ -540,7 +560,7 @@ input[type=file]{display:none}
           <div>
             <label>配置</label>
             <select id="addPlace" onchange="syncAddSec()">
-              <option>OUT</option><option>IN</option><option>ICQA</option><option value="other">other</option><option value="WAIT">待機/欠勤</option>
+              <option>OUT</option><option>IN</option><option>ICQA</option><option value="other">other</option><option value="WAIT">待機</option><option value="ABSENT">欠勤</option><option value="HOLIDAY">休日</option>
             </select>
           </div>
         </div>
@@ -665,6 +685,18 @@ input[type=file]{display:none}
           <span id="adminCount" style="font-size:12px;color:var(--sub)"></span>
           <button class="btn" onclick="clearAdmins()" style="margin-left:auto;font-size:11px">管理者をクリア</button>
         </div>
+        <div class="admin-manual">
+          <div class="am-title">👑 手動で管理者を追加</div>
+          <div class="am-grid">
+            <input type="text" id="amName" placeholder="氏名" class="am-in">
+            <input type="text" id="amRole" placeholder="会社名" class="am-in">
+            <select id="amShift" class="am-in"><option value="日勤">日勤</option><option value="夜勤">夜勤</option></select>
+            <select id="amFloor" class="am-in"></select>
+            <input type="number" id="amLH" placeholder="LH" value="8" step="0.5" min="0" max="24" class="am-in am-lh">
+            <button class="btn primary am-add" onclick="addAdminManual()">追加</button>
+          </div>
+          <div class="am-list" id="amList"></div>
+        </div>
       </div>
       <div class="setting-item">
         <div class="setting-lbl">最新版に更新</div>
@@ -764,6 +796,14 @@ let DB={people:[],master:{OUT:[],IN:[],ICQA:[]},floors:["6F","5F","4F","3F","2F"
 const PLACES=["OUT","IN","ICQA","other","WAIT"];
 // 工程を持たない単一箱のPLACE(WAIT=待機, other=その他稼働枠)
 const BOX_PLACES=["other","WAIT"];
+// 非稼働枠(実稼働から除外) ── WAIT枠を縦3分割: 待機/欠勤/休日
+const NONWORK_LOCS=["WAIT","ABSENT","HOLIDAY"];
+const NONWORK_DEFS=[
+  {loc:"WAIT",label:"待機"},
+  {loc:"ABSENT",label:"欠勤"},
+  {loc:"HOLIDAY",label:"休日"}
+];
+function isNonWork(p){return NONWORK_LOCS.includes(locOf(p))}
 const ROLE_ORDER={Supervisor:0,Manager:1,Reader:2,Operator:3,Observer:4};
 // セクション小枠のカラーパレット（工程ごとに色相を振る）
 const PALETTE=["#e8820c","#0f9d8f","#7c3aed","#2563eb","#db2777","#16a34a","#d97706","#0891b2","#9333ea","#dc2626","#0d9488","#4f46e5","#ca8a04","#be123c","#15803d"];
@@ -809,6 +849,8 @@ function buildColors(){
   secColor={};let i=0;
   ["OUT","IN","ICQA"].forEach(pl=>DB.master[pl].forEach(s=>{secColor[pl+"|"+s]=PALETTE[i++%PALETTE.length]}));
   secColor["WAIT"]="#94a3b8";
+  secColor["ABSENT"]="#e0796b";
+  secColor["HOLIDAY"]="#6b9bd1";
   secColor["other"]="#5f5e5a";
 }
 function hexToRgba(h,a){const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`}
@@ -863,6 +905,8 @@ function locOf(p){
   const k=uidEnc(uid(p));
   if(layout[k]!==undefined){
     if(layout[k]==="WAIT")return "WAIT";
+    if(layout[k]==="ABSENT")return "ABSENT";  // 欠勤
+    if(layout[k]==="HOLIDAY")return "HOLIDAY"; // 休日
     if(layout[k]==="other")return "other";  // その他稼働枠(工程なし箱)
     const parts=layout[k].split("|");
     // Pickゾーン配置 (OUT|Pick|R 等) ── 親工程がマスタにあり、ゾーン名が定義済みなら有効
@@ -1166,25 +1210,41 @@ function countLH(mem){
 }
 function renderSingle(root){
   const visible=DB.people.filter(p=>p.shift===curShift && floorOf(p)===curFloor);
-  // 待機/欠勤は階層に関係なく当該シフトの全員から
-  const allWait=DB.people.filter(p=>p.shift===curShift && locOf(p)==="WAIT");
+  // 待機/欠勤/休日は階層に関係なく当該シフトの全員から(非稼働3枠)
+  const allNonWork=DB.people.filter(p=>p.shift===curShift && NONWORK_LOCS.includes(locOf(p)));
   const places=document.createElement("div");places.className="places";
   // 1つのPLACE枠(.place)を生成して返す
   const buildPlace=pl=>{
     const place=document.createElement("div");place.className="place "+pl;
     const isBox=BOX_PLACES.includes(pl);          // 工程なし箱(WAIT/other)
-    const subs=pl==="WAIT"?["待機/欠勤"]:(pl==="other"?["other"]:DB.master[pl]);
-    const pool = pl==="WAIT" ? allWait : visible;
-    const poolMembers = pl==="WAIT" ? allWait : visible.filter(p=>locOf(p).split("|")[0]===pl);
+    const pool = pl==="WAIT" ? allNonWork : visible;
+    const poolMembers = pl==="WAIT" ? allNonWork : visible.filter(p=>locOf(p).split("|")[0]===pl);
     const pcount = poolMembers.length;
     const pcLH = pcount?`${pcount}<span class="pc-lh">・${fmtLHval(lhOf(poolMembers))}</span>`:'0';
     const headLabel = pl==="WAIT"
-      ? '<div class="ph-row"><span>待機 / 欠勤</span><span class="pc">'+pcLH+'</span></div><span class="all-floors-mark">全フロア</span>'
+      ? '<div class="ph-row"><span>待機/欠勤/休日</span><span class="pc">'+pcLH+'</span></div><span class="all-floors-mark">全フロア</span>'
       : (pl==="other" ? 'other<span class="pc">'+pcLH+'</span>' : pl+'<span class="pc">'+pcLH+'</span>');
     place.innerHTML=`<div class="place-head ${pl}">${headLabel}</div>`;
     const body=document.createElement("div");body.className="place-body";
+    // WAIT枠は3分割(待機/欠勤/休日)
+    if(pl==="WAIT"){
+      NONWORK_DEFS.forEach(def=>{
+        const col=secColor[def.loc]||"#94a3b8";
+        const mem=allNonWork.filter(p=>locOf(p)===def.loc).sort(sortPeople);
+        const sec=document.createElement("div");sec.className="sec nonwork-sec";sec.dataset.loc=def.loc;
+        sec.style.borderColor=hexToRgba(col,.5);sec.style.background=hexToRgba(col,.07);
+        sec.innerHTML=`<div class="sec-lbl" style="color:${col}"><span>${def.label}</span>${countLH(mem)}</div>`;
+        const cards=document.createElement("div");cards.className="cards";
+        mem.forEach(p=>cards.appendChild(card(p)));
+        sec.appendChild(cards);
+        body.appendChild(sec);
+      });
+      place.appendChild(body);
+      return place;
+    }
+    const subs=pl==="other"?["other"]:DB.master[pl];
     subs.forEach(sub=>{
-      const loc=pl==="WAIT"?"WAIT":(pl==="other"?"other":pl+"|"+sub);
+      const loc=pl==="other"?"other":pl+"|"+sub;
       // OUT枠の Pick はゾーンレイアウトで描画
       if(pl==="OUT" && PICK_ZONE_LAYOUT.enabled && sub===PICK_ZONE_LAYOUT.secName){
         body.appendChild(renderPickZones(pl,sub,pool));
@@ -1336,14 +1396,20 @@ function renderMulti(root){
     floorsArea.appendChild(row);
   });
   grid.appendChild(floorsArea);
-  // 右側: 待機/欠勤(全フロア共通)
+  // 右側: 待機/欠勤/休日(全フロア共通・3分割)
   const waitCol=document.createElement("div");waitCol.className="multi-wait";
-  const waitMem=allShift.filter(p=>locOf(p)==="WAIT");
-  waitCol.innerHTML=`<div class="mw-head"><span>待機/欠勤</span><span class="mw-n">${waitMem.length}</span></div>`;
-  const waitSec=document.createElement("div");waitSec.className="sec mw-sec";waitSec.dataset.loc="WAIT";
-  const waitCards=document.createElement("div");waitCards.className="cards mw-cards";
-  waitMem.forEach(p=>waitCards.appendChild(card(p)));
-  waitSec.appendChild(waitCards);waitCol.appendChild(waitSec);
+  const allNW=allShift.filter(p=>NONWORK_LOCS.includes(locOf(p)));
+  waitCol.innerHTML=`<div class="mw-head"><span>待機/欠勤/休日</span><span class="mw-n">${allNW.length}</span></div>`;
+  NONWORK_DEFS.forEach(def=>{
+    const col=secColor[def.loc]||"#94a3b8";
+    const mem=allShift.filter(p=>locOf(p)===def.loc).sort(sortPeople);
+    const sec=document.createElement("div");sec.className="sec mw-sec mw-nonwork";sec.dataset.loc=def.loc;
+    sec.style.borderColor=hexToRgba(col,.5);
+    sec.innerHTML=`<div class="mw-sub-lbl" style="color:${col}"><span>${def.label}</span>${mem.length?'<span class="mw-sub-n">'+mem.length+'</span>':''}</div>`;
+    const cards=document.createElement("div");cards.className="cards mw-cards";
+    mem.forEach(p=>cards.appendChild(card(p)));
+    sec.appendChild(cards);waitCol.appendChild(sec);
+  });
   grid.appendChild(waitCol);
   root.appendChild(grid);
   renderStats(allShift);
@@ -1536,7 +1602,7 @@ function attachCardDrag(c,p){
       dragUids.forEach(k=>{document.querySelectorAll(`.card[data-uidkey="${k}"]`).forEach(el=>el.classList.add("dragging"))});
       document.body.classList.add("dragging-active");
       // 待機からドラッグ時、移動先フロアを大きくヒント表示
-      if(locOf(p)==="WAIT"){
+      if(isNonWork(p)){
         hint=document.createElement("div");
         hint.className="drag-hint";
         hint.innerHTML=viewMode==="multi"
@@ -1591,8 +1657,8 @@ function attachCardDrag(c,p){
         const targets=dragUids&&dragUids.length?dragUids:[uidEnc(uid(p))];
         targets.forEach(k=>{
           const person=DB.people.find(pp=>uidEnc(uid(pp))===k)||p;
-          const wasWait=locOf(person)==="WAIT";
-          if(loc!=="WAIT"&&(wasWait||floorOf(person)!==targetFloor)){
+          const wasWait=isNonWork(person);
+          if(!NONWORK_LOCS.includes(loc)&&(wasWait||floorOf(person)!==targetFloor)){
             setFloorMove(k,targetFloor);
           }
           setLayout(k,loc);
@@ -1637,7 +1703,7 @@ function renderHitbar(){
     const chip=document.createElement("span");
     chip.className="hitchip"+(here?" here":"");
     const loc=locOf(p);
-    const where=loc==="WAIT"?"待機":loc.split("|").join(" / ");
+    const where=loc==="WAIT"?"待機":loc==="ABSENT"?"欠勤":loc==="HOLIDAY"?"休日":loc.split("|").join(" / ");
     chip.innerHTML=`${displayName(p)} <span class="hf">${fl}</span> <span style="color:var(--sub);font-weight:600">${where}</span>`;
     if(!here)chip.onclick=()=>{curFloor=fl;render()};
     bar.appendChild(chip);
@@ -1647,12 +1713,12 @@ function renderHitbar(){
 function renderStats(v){
   const allOnFloor=v;
   // 管理者: 待機中(=休日)はカウントしない。稼働中の管理者のみ管理者数に計上
-  const adminActive=v.filter(p=>p.admin && locOf(p)!=="WAIT").length;
-  const adminOff=v.filter(p=>p.admin && locOf(p)==="WAIT").length;  // 休日(待機)管理者
+  const adminActive=v.filter(p=>p.admin && !isNonWork(p)).length;
+  const adminOff=v.filter(p=>p.admin && isNonWork(p)).length;  // 非稼働(待機/欠勤/休日)管理者
   v=v.filter(p=>!p.admin);  // 集計対象は管理者除外
   const fork=v.filter(p=>p.fork).length;
-  const wait=v.filter(p=>locOf(p)==="WAIT").length;
-  const allWait=DB.people.filter(p=>p.shift===curShift && !p.admin && locOf(p)==="WAIT").length;
+  const wait=v.filter(p=>isNonWork(p)).length;
+  const allWait=DB.people.filter(p=>p.shift===curShift && !p.admin && isNonWork(p)).length;
   const bp=pl=>v.filter(p=>locOf(p).split("|")[0]===pl).length;
   const adminTag=adminActive?` <span style="color:#d97706;font-weight:700">👑 管理者 ${adminActive}名</span>`:'';
   const adminOffTag=adminOff?` <span style="color:#94a3b8;font-weight:600">(休日 ${adminOff}名)</span>`:'';
@@ -1701,8 +1767,8 @@ function openSummary(){
   const all=DB.people.filter(p=>p.shift===curShift);
   const v=all.filter(p=>!p.admin);
   // 管理者: 待機中(=休日)はカウントしない。稼働中(非WAIT)のみ管理者列に計上
-  const adminP=all.filter(p=>p.admin && locOf(p)!=="WAIT");   // 稼働中の管理者
-  const adminOff=all.filter(p=>p.admin && locOf(p)==="WAIT"); // 休日(待機)の管理者
+  const adminP=all.filter(p=>p.admin && !isNonWork(p));   // 稼働中の管理者
+  const adminOff=all.filter(p=>p.admin && isNonWork(p)); // 非稼働の管理者
   const fl=DB.floors.filter(f=>all.some(p=>floorOf(p)===f));
   document.getElementById("summaryTitle").textContent=`配置サマリ(${curShift})`;
   const body=document.getElementById("summaryBody");
@@ -1720,9 +1786,9 @@ function openSummary(){
   html+=`<div class="sumblock"><h3>フロア別 合計</h3><table class="sumtbl"><tr><th rowspan="2">フロア</th><th colspan="2">OUT</th><th colspan="2">IN</th><th colspan="2">ICQA</th><th colspan="2">other</th><th colspan="2">待機/欠勤</th><th colspan="2" class="rowtot">実稼働 合計</th><th class="admin-col" rowspan="2">👑<br>管理者</th></tr><tr><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th>HC</th><th>LH</th><th class="rowtot">HC</th><th class="rowtot">LH</th></tr>`;
   DB.floors.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
-    const fpAct=fp.filter(p=>locOf(p)!=="WAIT");  // 稼働者のみ(待機/欠勤を除外)
+    const fpAct=fp.filter(p=>!isNonWork(p));  // 稼働者のみ(待機/欠勤/休日を除外)
     const fa=adminP.filter(p=>floorOf(p)===f);
-    const grp=pl=>(pl==="WAIT"||pl==="other")?fp.filter(p=>locOf(p)===pl):fp.filter(p=>locOf(p).split("|")[0]===pl);
+    const grp=pl=>pl==="WAIT"?fp.filter(p=>isNonWork(p)):(pl==="other"?fp.filter(p=>locOf(p)==="other"):fp.filter(p=>locOf(p).split("|")[0]===pl));
     const h=floorHue(f);
     const empty=fp.length===0&&fa.length===0;
     const tds=["OUT","IN","ICQA","other","WAIT"].map(pl=>{
@@ -1730,8 +1796,8 @@ function openSummary(){
     }).join("");
     html+=`<tr${empty?' class="emptyrow"':''}><td class="secname" style="border-left:5px solid hsl(${h},60%,50%)">${f}</td>${tds}<td class="rowtot">${fpAct.length}</td><td class="rowtot">${fpAct.length?fmtLH(lhSum(fpAct)):0}</td><td class="admin-col">${fa.length||'<span class="z">0</span>'}</td></tr>`;
   });
-  const allgrp=pl=>(pl==="WAIT"||pl==="other")?v.filter(p=>locOf(p)===pl):v.filter(p=>locOf(p).split("|")[0]===pl);
-  const vAct=v.filter(p=>locOf(p)!=="WAIT");  // 全フロアの稼働者のみ(待機/欠勤を除外)
+  const allgrp=pl=>pl==="WAIT"?v.filter(p=>isNonWork(p)):(pl==="other"?v.filter(p=>locOf(p)==="other"):v.filter(p=>locOf(p).split("|")[0]===pl));
+  const vAct=v.filter(p=>!isNonWork(p));  // 全フロアの稼働者のみ(待機/欠勤/休日を除外)
   const alltds=["OUT","IN","ICQA","other","WAIT"].map(pl=>{const g=allgrp(pl);return `<td>${g.length}</td><td>${fmtLH(lhSum(g))}</td>`}).join("");
   // 全フロア OUT/IN の LH合計を取り出す(TP算出に使用)
   const lhOutAll=lhSum(allgrp("OUT"));
@@ -1783,7 +1849,7 @@ function openSummary(){
   // フロアごとの工程別内訳(管理者は別枠で各セクションに併記。待機中の管理者=休日は別表示)
   fl.forEach(f=>{
     const fp=v.filter(p=>floorOf(p)===f);
-    const fpAct=fp.filter(p=>locOf(p)!=="WAIT");  // 稼働者のみ(待機/欠勤を除外)
+    const fpAct=fp.filter(p=>!isNonWork(p));  // 稼働者のみ(待機/欠勤/休日を除外)
     const fa=adminP.filter(p=>floorOf(p)===f);
     const foff=adminOff.filter(p=>floorOf(p)===f);  // このフロアの休日(待機)管理者
     const h=floorHue(f);
@@ -1837,7 +1903,7 @@ function openSummary(){
         `<tr><td class="plh" style="background:#5f5e5a">other</td><td class="plh" style="background:#5f5e5a">${oHC}名</td><td class="plh" style="background:#5f5e5a">LH ${fmtLH(lhSum(otherMem))}</td><td class="plh" style="background:#5f5e5a"></td></tr>`+
         `<tr><td class="secname">—</td><td class="${otherMem.length?'has':'z'}">${otherMem.length}</td><td class="lh">${fmtLH(lhSum(otherMem))}</td><td class="nmcell">${oCell}</td></tr></table>`;
     }
-    const waitMem=fp.filter(p=>locOf(p)==="WAIT");
+    const waitMem=fp.filter(p=>isNonWork(p));
     if(waitMem.length){
       const names=waitMem.map(p=>`<span class="nm op">${displayName(p)}</span>`).join("");
       html+=`<table class="sumtbl sumdetail"><colgroup><col style="width:110px"><col style="width:60px"><col style="width:55px"><col></colgroup>`+
@@ -1960,7 +2026,7 @@ function buildMiroData(){
         .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
     }
     if(miroPlaceSel.includes("WAIT")){
-      people.filter(p=>floorOf(p)===f && locOf(p)==="WAIT").sort(sortPeople)
+      people.filter(p=>floorOf(p)===f && isNonWork(p)).sort(sortPeople)
         .forEach(p=>names.push(displayName(p)+(p.fork?" [F]":"")));
     }
   });
@@ -2130,7 +2196,7 @@ function closeAdd(){document.getElementById("addModal").classList.remove("open")
 function syncAddSec(){
   const pl=document.getElementById("addPlace").value;
   const sec=document.getElementById("addSec");sec.innerHTML="";
-  if(pl==="WAIT"||pl==="other"){const o=document.createElement("option");o.value="";o.textContent="(なし)";sec.appendChild(o);sec.disabled=true;return}
+  if(pl==="WAIT"||pl==="other"||pl==="ABSENT"||pl==="HOLIDAY"){const o=document.createElement("option");o.value="";o.textContent="(なし)";sec.appendChild(o);sec.disabled=true;return}
   sec.disabled=false;
   DB.master[pl].forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;sec.appendChild(o)});
 }
@@ -2165,7 +2231,7 @@ function renderAddHistory(){
   const box=document.getElementById("addHistory");if(!box)return;
   const hist=loadAddHistory();
   if(!hist.length){box.innerHTML="";return}
-  const placeLabel=e=>e.place==="WAIT"?"待機":(e.place==="other"?"other":(e.sub?e.place+"/"+e.sub:e.place));
+  const placeLabel=e=>e.place==="WAIT"?"待機":e.place==="ABSENT"?"欠勤":e.place==="HOLIDAY"?"休日":(e.place==="other"?"other":(e.sub?e.place+"/"+e.sub:e.place));
   box.innerHTML=`<div class="ah-head"><span class="ah-title">追加履歴(この端末)</span><button class="ah-clear" onclick="clearAddHistory()">全消去</button></div>`+
     `<div class="ah-chips">`+hist.map((e,i)=>
       `<div class="ah-chip" title="クリックで即追加">`+
@@ -2187,11 +2253,13 @@ function addPersonEntry(e,fromHistory){
   if(DB.people.some(p=>p.name===name)){
     if(!confirm(`「${name}」さんは既に名簿に存在します。それでも追加しますか?`))return;
   }
-  const place=e.place, sub=(place==="WAIT"||place==="other")?"":(e.sub||"");
+  const place=e.place, isBox=(place==="WAIT"||place==="other"||place==="ABSENT"||place==="HOLIDAY"), sub=isBox?"":(e.sub||"");
   const maxNo=DB.people.reduce((m,p)=>Math.max(m,p.no),0);
-  const newP={no:maxNo+1,role:e.role||"",section:(place==="WAIT"||place==="other")?"OUT":place,subsec:sub,floor:e.floor,name,fork:!!e.fork,shift:e.shift,startT:"",endT:"",lh:e.lh||0,batch:"",custom:true};
+  const newP={no:maxNo+1,role:e.role||"",section:isBox?"OUT":place,subsec:sub,floor:e.floor,name,fork:!!e.fork,shift:e.shift,startT:"",endT:"",lh:e.lh||0,batch:"",custom:true};
   DB.people.push(newP);
   if(place==="WAIT")setLayout(uidEnc(uid(newP)),"WAIT");
+  else if(place==="ABSENT")setLayout(uidEnc(uid(newP)),"ABSENT");
+  else if(place==="HOLIDAY")setLayout(uidEnc(uid(newP)),"HOLIDAY");
   else if(place==="other")setLayout(uidEnc(uid(newP)),"other");
   pushCustom(newP);
   // 履歴に記録(先頭へ)
@@ -2208,7 +2276,7 @@ function submitAdd(){
   const shift=document.getElementById("addShift").value;
   const floor=document.getElementById("addFloor").value;
   const place=document.getElementById("addPlace").value;
-  const sub=(place==="WAIT"||place==="other")?"":document.getElementById("addSec").value;
+  const sub=(place==="WAIT"||place==="other"||place==="ABSENT"||place==="HOLIDAY")?"":document.getElementById("addSec").value;
   const lh=parseFloat(document.getElementById("addLH").value)||0;
   const fork=document.getElementById("addFork").checked;
   addPersonEntry({name,role,shift,floor,place,sub,lh,fork},false);
@@ -2244,7 +2312,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.06.30.4";
+const APP_VERSION="2026.06.30.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -2308,6 +2376,14 @@ function openSettings(){
   const adminCnt=DB.people.filter(p=>p.admin).length;
   const adminCntEl=document.getElementById("adminCount");
   if(adminCntEl)adminCntEl.textContent=adminCnt?`現在 ${adminCnt}名 の管理者を登録中`:"管理者未登録";
+  // 手動追加のフロアセレクタを埋める + シフト初期値
+  const amFloor=document.getElementById("amFloor");
+  if(amFloor){
+    amFloor.innerHTML="";
+    DB.floors.forEach(f=>{const o=document.createElement("option");o.value=f;o.textContent=f;if(f===(curFloor||DB.floors[0]))o.selected=true;amFloor.appendChild(o)});
+  }
+  const amShift=document.getElementById("amShift");if(amShift)amShift.value=curShift;
+  renderAdminList();
   document.getElementById("settingsModal").classList.add("open");
   // サーバー最新版(version.json)を控えめにチェックして表示
   checkLatestVersion();
@@ -2382,8 +2458,62 @@ function clearAdmins(){
   if(window.fb)fb.remove(fb.rRef("admins"));
   _roleAutoVer=-1;
   render();
+  renderAdminList();
   const el=document.getElementById("adminCount");
   if(el)el.textContent="管理者未登録";
+}
+// 手動で管理者を1名追加 ── 読込と同じステータス(admin:true, adminsパスで同期)
+function addAdminManual(){
+  const name=document.getElementById("amName").value.trim();
+  if(!name){alert("氏名を入力してください");return}
+  const role=document.getElementById("amRole").value.trim();
+  const shift=document.getElementById("amShift").value;
+  const floor=document.getElementById("amFloor").value;
+  const lh=parseFloat(document.getElementById("amLH").value)||0;
+  // 同名の管理者が既にいれば確認
+  if(DB.people.some(p=>p.admin&&p.name===name)){
+    if(!confirm(`「${name}」さんは既に管理者に登録されています。それでも追加しますか?`))return;
+  }
+  const maxNo=DB.people.reduce((m,p)=>Math.max(m,p.no),0);
+  // 読込管理者と同じ構造の人オブジェクト(admin:true)
+  const newAdmin={no:maxNo+1,role,section:"OUT",subsec:(DB.master.OUT[0]||""),floor,name,fork:false,shift,startT:"",endT:"",lh,batch:"",admin:true};
+  DB.people.push(newAdmin);
+  _roleAutoVer=-1;
+  saveAdmins();   // 読込と同じ adminsパスへ同期(全端末反映)
+  render();
+  renderAdminList();
+  // フォームをリセット(会社名は連続追加しやすいよう残す)
+  document.getElementById("amName").value="";
+  document.getElementById("amLH").value=8;
+  document.getElementById("amName").focus();
+  const el=document.getElementById("adminCount");
+  const total=DB.people.filter(p=>p.admin).length;
+  if(el)el.textContent=`現在 ${total}名 の管理者を登録中`;
+}
+// 管理者一覧を描画(手動追加分・読込分すべて) + 個別削除
+function renderAdminList(){
+  const box=document.getElementById("amList");if(!box)return;
+  const admins=DB.people.filter(p=>p.admin).sort(sortPeople);
+  if(!admins.length){box.innerHTML='<div class="am-empty">管理者は登録されていません</div>';return}
+  box.innerHTML=admins.map(a=>{
+    const k=uidEnc(uid(a));
+    return `<div class="am-chip"><span class="am-crown">👑</span><span class="am-nm">${displayName(a)}</span><span class="am-meta">${a.role||"?"} / ${a.shift} / ${a.floor}${a.lh?" / LH"+a.lh:""}</span><button class="am-del" onclick="removeAdmin('${k}')" title="削除">×</button></div>`;
+  }).join("");
+}
+// 管理者を1名削除
+function removeAdmin(k){
+  const target=DB.people.find(p=>p.admin&&uidEnc(uid(p))===k);
+  if(!target)return;
+  if(!confirm(`管理者「${displayName(target)}」を削除しますか?(全端末から削除されます)`))return;
+  DB.people=DB.people.filter(p=>!(p.admin&&uidEnc(uid(p))===k));
+  clearLayout(k);  // 配置情報も消す
+  saveAdmins();
+  _roleAutoVer=-1;
+  render();
+  renderAdminList();
+  const el=document.getElementById("adminCount");
+  const total=DB.people.filter(p=>p.admin).length;
+  if(el)el.textContent=total?`現在 ${total}名 の管理者を登録中`:"管理者未登録";
 }
 function renderQRCode(){
   // クリーンURLを生成(キャッシュバイパスパラメータを除去)
@@ -2605,7 +2735,7 @@ function buildPrintHTML(){
       html+=`</div></div></div></div>`;
     }
     html+=`</div>`; // /print-places
-    const w=fp.filter(p=>locOf(p)==="WAIT");
+    const w=fp.filter(p=>isNonWork(p));
     if(w.length){html+=`<div style="margin-top:6px;font-size:10px;color:#666">待機/欠勤(${w.length}名): ${w.map(p=>esc(displayName(p))).join("、")}</div>`}
     html+=`</div>`; // /print-floor
   });
