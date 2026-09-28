@@ -2486,7 +2486,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.28.3";
+const APP_VERSION="2026.09.28.5";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3546,6 +3546,8 @@ header.hc4 .x-hmenu{display:inline-flex}
 .x-log li .pc{float:right;font-size:10px;font-weight:700;color:var(--x-faint);margin-left:6px;font-family:var(--x-mono)}
 .x-log li.und{color:var(--x-faint);text-decoration:line-through}
 .x-log li.und .pc{text-decoration:none}
+.x-sdate{display:inline-block;font-size:.95em;font-weight:900;border-radius:7px;padding:1px 9px;margin-right:8px;color:#fff;vertical-align:1px}
+.x-sdate.td{background:#1d2330} .x-sdate.nx{background:#c2410c}
 @media (max-width:980px){
   .x-main{grid-template-columns:1fr;height:auto!important}
   .x-floors{grid-template-rows:none}
@@ -4334,6 +4336,45 @@ execPaste = async function(){
   X_logAdd(`コピペ取込（${i.label}分）${parsed.people.length}名：引き継ぎ${same}名・待機${wait}名・外れ${gone}名`);
 };
 window.execPaste = execPaste;
+
+/* ---------- 会社の色を固定（日によって色が変わらないように） ----------
+   今までは、その日の名簿にいる会社の並び順で色を決めていたため、会社が増減すると色がずれた。
+   9/28時点の色で固定し、新しい会社は空いている色を割り当てて roleColors に保存（全PC共通） */
+const X_ROLE_FIXED = {"NSジャパン":"#0891b2", "トップスポット":"#db2777", "ネオウィルＬ":"#16a34a", "パナロサ":"#ea580c", "ヒロスタッフ":"#9333ea", "マイチーム":"#dc2626", "千手":"#0d9488", "５５５":"#c026d3"};
+const X_roleMap = new Map(Object.entries(X_ROLE_FIXED));
+let X_roleLoaded = false;
+roleStyle = function(r){
+  if (ROLE_STYLES[r]) return ROLE_STYLES[r];
+  if (!r) return {bg:"#94a3b8", fg:"#fff"};
+  if (!X_roleMap.has(r)){
+    const used = new Set([...X_roleMap.values()]);
+    const bg = ROLE_AUTO_COLORS.find(c => !used.has(c)) || ROLE_AUTO_COLORS[X_roleMap.size % ROLE_AUTO_COLORS.length];
+    X_roleMap.set(r, bg);
+    if (X_roleLoaded && window.fb) fb.set(fb.rRef("roleColors/" + uidEnc(r)), {name:r, bg}).catch(e => console.error("roleColors", e));
+  }
+  return {bg:X_roleMap.get(r), fg:"#fff"};
+};
+window.roleStyle = roleStyle;
+function X_watchRoles(){
+  if (X_watchRoles.on || !window.fb) return; X_watchRoles.on = true;
+  fb.onValue(fb.rRef("roleColors"), snap => {
+    const v = snap.val() || {};
+    Object.values(v).forEach(e => { if (e && e.name && e.bg && !X_ROLE_FIXED[e.name]) X_roleMap.set(e.name, e.bg); });
+    X_roleLoaded = true;
+    render();
+  });
+}
+if (window.fbReady) X_watchRoles(); else document.addEventListener("fbReady", X_watchRoles);
+
+/* ---------- サマリに日付を表示 ---------- */
+const X_openSummaryOrig = openSummary;
+openSummary = function(){
+  X_openSummaryOrig.apply(this, arguments);
+  const t = document.getElementById("summaryTitle"), N = window.X_NEXT; if (!t || !N) return;
+  const d = N.on ? N.nextDate() : N.today();
+  t.innerHTML = `<span class="x-sdate ${N.on ? "nx" : "td"}">${X_esc(N.label(d))}</span>配置サマリ(${X_esc(curShift)})`;
+};
+window.openSummary = openSummary;
 
 render();
 
