@@ -2486,7 +2486,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.28.5";
+const APP_VERSION="2026.09.28.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3512,10 +3512,14 @@ header .toolbar>*{flex-shrink:0}
 header.hc1 .toolbar{gap:4px} header.hc1{padding-left:10px;padding-right:10px}
 header.hc1 .btn{padding:6px 8px} header.hc1 .tab{padding:6px 10px} header.hc1 .ftab{padding:6px 9px}
 header.hc1 .search-wrap .search{width:110px} header.hc1 .app-title .meta{display:none}
-header.hc3 .zoom-ctrl{display:none} header.hc3 .search-wrap .search{width:84px}
-header.hc4 [data-xmenu]{display:none!important}
+/* 3段目：使う回数の少ないボタンを「その他」へ。4段目：検索欄を短く・倍率の数字を隠す（拡大縮小のボタンは常に残す） */
+header.hc3 [data-xmenu]{display:none!important}
+header.hc4 .zoom-ctrl .zpct{display:none} header.hc4 .search-wrap .search{width:84px}
+/* 5段目：さらに狭いとき、見出しを隠し各ボタンの余白を詰める。6段目：検索欄を隠す */
+header.hc5 .app-title{display:none} header.hc5 .ftab{padding:6px 6px} header.hc5 .tab{padding:6px 8px} header.hc5 .x-day button{padding:6px 6px} header.hc5 .btn{padding:6px 6px} header.hc5 .search-wrap .search{width:64px} header.hc5 .toolbar{gap:3px}
+header.hc6 .search-wrap{display:none}
 .x-hmenu{display:none;position:relative}
-header.hc4 .x-hmenu{display:inline-flex}
+header.hc3 .x-hmenu{display:inline-flex}
 .x-hlist{position:absolute;top:calc(100% + 4px);right:0;z-index:100;background:#fff;border:1px solid #e0dcea;border-radius:10px;box-shadow:0 8px 24px rgba(29,35,48,.22);padding:5px;display:flex;flex-direction:column;gap:3px;min-width:140px}
 .x-hlist[hidden]{display:none}
 .x-hlist button{text-align:left;border:0;background:transparent;border-radius:7px;padding:7px 10px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap}
@@ -4407,8 +4411,8 @@ render();
   let mo = null;
   window.X_fitHeader = function(){
     if (mo) mo.disconnect();
-    hd.classList.remove("hc1", "hc2", "hc3", "hc4"); short(false);
-    const steps = [() => hd.classList.add("hc1"), () => { hd.classList.add("hc2"); short(true); }, () => hd.classList.add("hc3"), () => hd.classList.add("hc4")];
+    hd.classList.remove("hc1", "hc2", "hc3", "hc4", "hc5", "hc6"); short(false);
+    const steps = [() => hd.classList.add("hc1"), () => { hd.classList.add("hc2"); short(true); }, () => hd.classList.add("hc3"), () => hd.classList.add("hc4"), () => hd.classList.add("hc5"), () => hd.classList.add("hc6")];
     for (const st of steps){ if (!over()) break; st(); }
     if (mo){ mo.takeRecords(); mo.observe(tb, {childList:true, subtree:true}); }
   };
