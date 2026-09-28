@@ -780,7 +780,7 @@ body.x-next .x-nbar{display:flex}
    ・反映前の当日分は prevDay/ に残し、反映したPCだけ「元に戻す」が使える
    ================================================================ */
 (function(){
-  const NEXT_KEYS = ["roster", "custom", "layout", "floorMove", "nameOverride", "targetUnit", "targetFcst", "summaryNote"];
+  const NEXT_KEYS = ["roster", "custom", "layout", "floorMove", "nameOverride", "targetUnit", "targetFcst", "summaryNote", "opLog"];
   const SHARED_KEYS = ["admins", "master", "deletedSections", "floors", "targetUPH"];
   const MODE_KEY = "haichi_daymode", TOKEN_KEY = "haichi_promote_token";
   let mode = "today";
@@ -2486,7 +2486,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.28.1";
+const APP_VERSION="2026.09.28.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3537,6 +3537,15 @@ header.hc4 .x-hmenu{display:inline-flex}
 .x-pdfd{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font:inherit;font-size:16px;font-weight:900;color:#1d2330;background:#fff;border:1.5px solid #e0dcea;border-radius:9px;padding:9px 12px;cursor:pointer}
 .x-pdfd small{font-size:11px;font-weight:700;color:#666d7c}
 .x-pdfd:hover{border-color:#0ea5e9;background:#f0f9ff}
+@media print{
+  @page{size:A3 portrait;margin:0}
+  body.x-printing #printArea{display:block!important;zoom:1!important}
+  body.x-printing .x-printimg{display:block;width:100%;height:auto}
+  body.x-printing .x-mwin,body.x-printing .x-toast,body.x-printing .x-nbar,body.x-printing .x-ubar,body.x-printing .x-pop,body.x-printing .card-popover{display:none!important}
+}
+.x-log li .pc{float:right;font-size:10px;font-weight:700;color:var(--x-faint);margin-left:6px;font-family:var(--x-mono)}
+.x-log li.und{color:var(--x-faint);text-decoration:line-through}
+.x-log li.und .pc{text-decoration:none}
 @media (max-width:980px){
   .x-main{grid-template-columns:1fr;height:auto!important}
   .x-floors{grid-template-rows:none}
@@ -3556,7 +3565,7 @@ const X_openArea = {};           // ＋空き工程で開いている区分（fl
 const X_isShared = pl => pl === "ICQA" || pl === "other";
 const X_GL = {OUT:"OUTBOUND", IN:"INBOUND", ICQA:"ICQA", other:"other"};
 const X_NWC = {WAIT:"#94a3b8", ABSENT:"#e0796b", HOLIDAY:"#6b9bd1"};
-let X_LOG = [], X_UNDO = [], X_hot = null;
+let X_hot = null;
 function X_toast(t){
   let el = document.getElementById("xToast");
   if (!el){ el = document.createElement("div"); el.id = "xToast"; el.className = "x-toast"; document.body.appendChild(el); }
@@ -3627,13 +3636,12 @@ function X_aside(main, kind){
     const cs = X_el("div", "x-chips"); ps.forEach(p => cs.appendChild(X_chip(p, kind))); if (!ps.length) cs.innerHTML = '<span class="x-none">なし</span>';
     s.appendChild(cs); as.appendChild(s);
   });
-  const lg = X_el("div", "x-log");
-  lg.innerHTML = `<h3>操作の記録<button type="button" class="x-mini" id="xUndo"${X_UNDO.length ? "" : " disabled"}>1つ戻す</button></h3><ol>` +
-    (X_LOG.length ? X_LOG.slice().reverse().map(l => `<li><time>${X_esc(l.t)}</time>${X_esc(l.msg)}</li>`).join("")
-      : '<li class="hint">コマを工程の枠へドラッグ。空いている工程に置くときは「＋空き工程」の上へ持っていくと、その枠の空き工程が小窓で開きます。カーソルを置くと詳細、クリックでフロア異動、右クリックでカードの編集。工程の名前をつかむと、その工程の全員をまとめて移動できます（別フロアの同じ区分の枠やフロアのタブに落とすと、同じ工程へ移ります）。動かした内容はここに残ります。</li>') + `</ol>`;
+  const lg = X_el("div", "x-log"); lg.id = "xLog";
+  lg.innerHTML = `<h3>操作の記録<button type="button" class="x-mini" id="xUndo">1つ戻す</button></h3><ol></ol>`;
   lg.querySelector("#xUndo").onclick = X_undo;
   as.appendChild(lg);
   main.appendChild(as);
+  X_paintLog(lg);
 }
 function X_flashHot(){
   if (!X_hot) return;
@@ -3769,22 +3777,50 @@ function createMultiSec(){ return document.createElement("div"); }
 
 /* ---------- 移動（記録・1つ戻す付き） ---------- */
 function X_snap(ps){ return ps.map(p => { const k = X_key(p); return {k, lay:layout[k], fm:floorMove[k]}; }); }
+// 操作の記録：全PC共通（Firebase の opLog。翌日の画面では翌日分の記録）
+// 移動の記録には、動かす前の配置を持たせ、どのPCからでも「1つ戻す」で取り消せる
+const X_PC = (() => { try { let v = localStorage.getItem("haichi_pc_id"); if (!v){ v = Math.random().toString(36).slice(2, 6).toUpperCase(); localStorage.setItem("haichi_pc_id", v); } return v; } catch (e){ return "----"; } })();
+let X_LOGS = [];   // [{id, at, msg, pc, snap?, undone?}]
+function X_logWrite(entry){
+  if (!window.fb) return;
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  fb.set(fb.rRef("opLog/" + id), Object.assign({at:Date.now(), pc:X_PC}, entry)).catch(e => console.error("opLog", e));
+  // 古い記録は200件まで
+  if (X_LOGS.length > 200) X_LOGS.slice(0, X_LOGS.length - 200).forEach(l => fb.remove(fb.rRef("opLog/" + l.id)));
+}
+function X_logAdd(msg){ X_logWrite({msg}); }
 function X_record(snap, msg, keepKey){
-  X_UNDO.push({snap, keepKey, keepHad:keepKey ? X_keepEmpty.has(keepKey) : true, logLen:X_LOG.length});
-  const d = new Date();
-  X_LOG.push({t:String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"), msg});
-  if (X_UNDO.length > 50) X_UNDO.shift();
+  X_logWrite({msg, keepKey:keepKey || null, snap:snap.map(x => ({k:x.k, lay:x.lay === undefined ? null : x.lay, fm:x.fm === undefined ? null : x.fm}))});
+}
+function X_paintLog(lg){
+  lg = lg || document.getElementById("xLog"); if (!lg) return;
+  const ol = lg.querySelector("ol"), last = X_LOGS.slice().reverse().find(l => l.snap && !l.undone);
+  const btn = lg.querySelector("#xUndo"); btn.disabled = !last;
+  btn.title = last ? "取り消す操作：" + last.msg : "";
+  ol.innerHTML = X_LOGS.slice().reverse().map(l => {
+    const d = new Date(l.at), t = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    return `<li class="${l.undone ? "und" : ""}"><time>${t}</time>${X_esc(l.msg)}<span class="pc">PC-${X_esc(l.pc || "")}${l.undone ? "・取消" + (l.undoPc ? "（PC-" + X_esc(l.undoPc) + "）" : "") : ""}</span></li>`;
+  }).join("");
 }
 function X_undo(){
-  const u = X_UNDO.pop(); if (!u) return;
-  u.snap.forEach(s => {
-    if (s.lay === undefined) clearLayout(s.k); else setLayout(s.k, s.lay);
-    if (s.fm === undefined) clearFloorMove(s.k); else setFloorMove(s.k, s.fm);
+  const u = X_LOGS.slice().reverse().find(l => l.snap && !l.undone); if (!u) return;
+  (u.snap || []).forEach(s => {
+    if (s.lay == null) clearLayout(s.k); else setLayout(s.k, s.lay);
+    if (s.fm == null) clearFloorMove(s.k); else setFloorMove(s.k, s.fm);
   });
-  if (u.keepKey && !u.keepHad) X_keepEmpty.delete(u.keepKey);
-  X_LOG.length = Math.min(X_LOG.length, u.logLen);
-  render(); X_toast("1つ戻しました");
+  if (u.keepKey) X_keepEmpty.delete(u.keepKey);
+  fb.update(fb.rRef("opLog/" + u.id), {undone:true, undoAt:Date.now(), undoPc:X_PC});
+  render(); X_toast("1つ戻しました：" + u.msg);
 }
+function X_watchLog(){
+  if (X_watchLog.on || !window.fb) return; X_watchLog.on = true;
+  fb.onValue(fb.rRef("opLog"), snap => {
+    const v = snap.val() || {};
+    X_LOGS = Object.entries(v).map(([id, e]) => Object.assign({id}, e)).filter(e => e && e.at).sort((a, b) => a.at - b.at);
+    X_paintLog();
+  });
+}
+if (window.fbReady) X_watchLog(); else document.addEventListener("fbReady", X_watchLog);
 function X_movePeople(ps, floor, loc){
   ps.forEach(p => {
     const k = X_key(p);
@@ -3953,7 +3989,7 @@ function X_openEdit(p, el){
       saveAdmins(); saveRoster();
     } else X_persist(p);
     _roleAutoVer = -1;
-    X_LOG.push({t:new Date().toTimeString().slice(0, 5), msg:`${displayName(p)} のカードを編集`});
+    X_logAdd(`${displayName(p)} のカードを編集`);
     X_closeEdit(); render(); X_toast(`${displayName(p)} を更新しました`);
   };
   const del = m.querySelector("#xeDel");
@@ -3963,7 +3999,7 @@ function X_openEdit(p, el){
     DB.people = DB.people.filter(x => x !== p);
     if (p.admin) saveAdmins(); else if (p.custom) removeCustomFB(p.no); else saveRoster();
     clearLayout(k); clearFloorMove(k);
-    X_LOG.push({t:new Date().toTimeString().slice(0, 5), msg:`${name} を削除`});
+    X_logAdd(`${name} を削除`);
     X_closeEdit(); render(); X_toast(`${name} を削除しました`);
   };
   m.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.tagName === "INPUT") m.querySelector("#xeSave").click(); });
@@ -4076,7 +4112,7 @@ function X_buildA3(dateStr){
   h += `<div class="xa3-leg">${roles.map(r => `<span style="--cc:${roleStyle(r).bg}">${e(r)}</span>`).join("")}<span style="--cc:#dc2626">F＝フォーク</span></div>`;
   return h;
 }
-async function X_exportA3(dateStr, html){
+async function X_exportA3(dateStr, html, forPrint){
   if (!window.html2canvas || !window.jspdf){ alert("PDFライブラリの読み込みに失敗しました。ネット接続を確認してページを再読込してください。"); return; }
   html = html || X_buildA3(dateStr);
   if (html === null){ alert(curShift + "の出勤予定者がいません"); return; }
@@ -4091,6 +4127,16 @@ async function X_exportA3(dateStr, html){
     for (const fs of [18, 17, 16, 15, 14.5, 14, 13.5, 13, 12.5, 12, 11.5, 11, 10.5, 10, 9.5, 9, 8.5, 8]){ box.style.setProperty("--fs", fs + "px"); if (box.scrollHeight <= maxH) break; }
     if (box.scrollHeight < maxH) box.style.minHeight = maxH + "px";
     const canvas = await html2canvas(box, {scale:2, backgroundColor:"#ffffff", logging:false, width:W, windowWidth:W});
+    if (forPrint){
+      // 印刷：PDFと同じ画像をA3縦1枚で印刷する
+      const pa = document.getElementById("printArea");
+      pa.innerHTML = `<img class="x-printimg" src="${canvas.toDataURL("image/jpeg", 0.92)}">`;
+      document.body.classList.add("x-printing");
+      await new Promise(r => { const im = pa.querySelector("img"); if (im.complete) r(); else im.onload = r; });
+      window.print();
+      setTimeout(() => { document.body.classList.remove("x-printing"); pa.innerHTML = ""; }, 500);
+      return;
+    }
     const {jsPDF} = window.jspdf;
     const pdf = new jsPDF({orientation:"portrait", unit:"mm", format:"a3"});
     const pw = 297, ph = 420;
@@ -4121,26 +4167,30 @@ async function X_buildA3For(dateStr, other){
   finally { DB.people = P0; layout = L0; floorMove = F0; nameOverride = O0; _roleAutoVer = -1; }
 }
 let X_pdfMenu = null;
-async function exportPDF(){
-  if (X_pdfMenu){ X_pdfMenu.remove(); X_pdfMenu = null; return; }
+async function exportPDF(forPrint){
+  forPrint = forPrint === true;
+  if (X_pdfMenu){ X_pdfMenu.remove(); X_pdfMenu = null; if (!forPrint) return; }
   const N = window.X_NEXT, btn = document.querySelector(".btn.pdf");
-  if (!N || !N.raw) return X_exportA3();
+  if (!N || !N.raw) return X_exportA3(undefined, undefined, forPrint);
   const cur = N.on ? N.nextDate() : N.today(), oth = N.on ? N.today() : N.nextDate();
   const m = X_el("div", "x-mwin x-pdfm");
-  m.innerHTML = `<h5><b>PDF出力</b>何日分を出しますか（${X_esc(curShift)}）</h5>` +
+  m.innerHTML = `<h5><b>${forPrint ? "印刷" : "PDF出力"}</b>何日分を出しますか（${X_esc(curShift)}）</h5>` +
     [[cur, false], [oth, true]].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([d, o]) => `<button type="button" class="x-pdfd" data-d="${d}" data-o="${o ? 1 : ""}">${X_esc(N.label(d))}分<small>${d === N.today() ? "当日" : "翌日"}${o ? "" : "・表示中"}</small></button>`).join("");
   document.body.appendChild(m); X_pdfMenu = m;
-  const r = (btn || document.body).getBoundingClientRect();
+  const r = forPrint ? {right:innerWidth / 2 + 120, bottom:120} : (btn || document.body).getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + "px"; m.style.top = (r.bottom + 6) + "px";
   m.querySelectorAll(".x-pdfd").forEach(b => b.onclick = async () => {
     m.remove(); X_pdfMenu = null;
     const d = b.dataset.d, html = await X_buildA3For(d, !!b.dataset.o);
     if (html === null){ alert(`${N.label(d)}分の${curShift}の名簿がありません`); return; }
-    X_exportA3(d, html);
+    X_exportA3(d, html, forPrint);
   });
   setTimeout(() => document.addEventListener("pointerdown", function h(e){ if (X_pdfMenu && !X_pdfMenu.contains(e.target) && !e.target.closest(".btn.pdf")){ X_pdfMenu.remove(); X_pdfMenu = null; } if (!X_pdfMenu) document.removeEventListener("pointerdown", h); }), 0);
 }
 window.exportPDF = exportPDF;
+// 設定の「印刷する」も同じA3縦1枚のレイアウトで
+function printAll(){ exportPDF(true); }
+window.printAll = printAll;
 
 /* ---------- コピペ取込：取り込む日付の表示と、前日の配置からの足し引き ----------
    貼り付けた名簿を、その日の名簿として作り直す（管理者は対象外）
@@ -4281,7 +4331,7 @@ execPaste = async function(){
   });
   render();
   A0(`${i.label}分として ${parsed.people.length}名を取り込みました。\n前日と同じ配置：${same}名　待機へ：${wait}名　外れた人：${gone}名`);
-  X_LOG.push({t:new Date().toTimeString().slice(0, 5), msg:`コピペ取込（${i.label}分）${parsed.people.length}名：引き継ぎ${same}名・待機${wait}名・外れ${gone}名`});
+  X_logAdd(`コピペ取込（${i.label}分）${parsed.people.length}名：引き継ぎ${same}名・待機${wait}名・外れ${gone}名`);
 };
 window.execPaste = execPaste;
 
