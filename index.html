@@ -2543,7 +2543,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.29.1";
+const APP_VERSION="2026.09.29.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4231,8 +4231,9 @@ async function X_buildA3For(dateStr, other){
   const people = [...ro, ...Object.values(v.custom || {}).filter(Boolean), ...DB.people.filter(p => p.admin)];
   const P0 = DB.people, L0 = layout, F0 = floorMove, O0 = nameOverride;
   DB.people = people; layout = v.layout || {}; floorMove = v.floorMove || {}; nameOverride = v.nameOverride || {}; _roleAutoVer = -1;
+  window.X_asNext = !N.on;   // 当日表示から翌日分を出すとき：未配置の管理者は待機
   try { return people.some(p => !p.admin) ? X_buildA3(dateStr) : null; }
-  finally { DB.people = P0; layout = L0; floorMove = F0; nameOverride = O0; _roleAutoVer = -1; }
+  finally { DB.people = P0; layout = L0; floorMove = F0; nameOverride = O0; _roleAutoVer = -1; window.X_asNext = false; }
 }
 let X_pdfMenu = null;
 async function exportPDF(forPrint){
@@ -4338,6 +4339,13 @@ setTimeout(() => {
   openPasteModal();
   if (v !== "\u0000") document.getElementById("pasteArea").value = v;
 }, 600);
+// 翌日分：まだ配置していない管理者は、すべて待機に置く（翌日分が空になった＝リセット直後も待機）
+const X_locOf0 = locOf;
+locOf = function(p){
+  if (p && p.admin && !window.X_refCalc && window.X_NEXT && (X_NEXT.on || window.X_asNext) && layout[X_key(p)] === undefined) return "WAIT";
+  return X_locOf0(p);
+};
+window.locOf = locOf;
 // 前日（引き継ぎ元）の名簿と配置
 async function X_refPlaces(){
   const N = window.X_NEXT;
@@ -4351,7 +4359,7 @@ async function X_refPlaces(){
   const admins = DB.people.filter(p => p.admin);   // 管理者は当日と共通の名簿
   // 本番の locOf／floorOf をそのまま使うため、一時的に引き継ぎ元の配置へ差し替えて計算する
   const L0 = layout, F0 = floorMove, out = new Map(), byName = new Map(), adm = new Map();
-  layout = lay; floorMove = fm;
+  layout = lay; floorMove = fm; window.X_refCalc = true;   // 当日の配置で計算（管理者の「翌日は待機」を効かせない）
   try {
     people.forEach(p => {
       const v = {loc:locOf(p), floor:floorOf(p), key:`${p.shift}|${p.role}|${p.name}`};
@@ -4360,7 +4368,7 @@ async function X_refPlaces(){
       byName.set(nk, byName.has(nk) ? null : v);       // 同じ名前が2人以上いるときは使わない
     });
     admins.forEach(p => adm.set(X_key(p), {loc:locOf(p), floor:floorOf(p)}));
-  } finally { layout = L0; floorMove = F0; }
+  } finally { layout = L0; floorMove = F0; window.X_refCalc = false; }
   return {count:people.length, adm, find:p => out.get(`${p.shift}|${p.role}|${p.name}`) || byName.get(p.shift + "|" + String(p.name || "").replace(/\s/g, "")) || null};   // 同じシフトの中で探す
 }
 const X_execPasteOrig = execPaste;
@@ -4378,7 +4386,7 @@ execPaste = async function(){
   const gone = Math.max(0, ref.count - kept.size);
   const C0 = window.confirm, A0 = window.alert; let ok = false;
   const msg = `【${i.label}分として取り込みます】${i.next ? "" : "\n※稼働中の当日の配置が変わります"}\n\n` +
-    `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者はそのまま）`;
+    `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者も当日と同じ配置）`;
   window.confirm = () => { ok = C0(msg); return ok; };
   window.alert = () => {};
   try { X_execPasteOrig(); } finally { window.confirm = C0; window.alert = A0; }
@@ -4390,13 +4398,13 @@ execPaste = async function(){
       if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor);
     } else setLayout(k, "WAIT");
   });
-  // 取込の記録（翌日分）：どのPCからも「取込済み」が見えるように
-  if (i.next && window.X_NEXT && X_NEXT.raw) X_NEXT.raw.set(X_NEXT.raw.rRef("next/meta/imported"), {at:Date.now(), count:parsed.people.length, day:parsed.people.filter(p => p.shift === "日勤").length, night:parsed.people.filter(p => p.shift === "夜勤").length});
-  // 管理者は前日と同じ場所（待機・休日なども含めてそのまま）
+  // 管理者も当日と同じ場所（待機・休日なども含めてそのまま）。翌日分ですでに動かした管理者はそのまま
   if (i.next) DB.people.filter(p => p.admin).forEach(p => {
     const k = X_key(p), r = ref.adm.get(k); if (!r) return;
-    if (layout[k] === undefined){ setLayout(k, r.loc); if (r.floor !== p.floor) setFloorMove(k, r.floor); }
+    if (layout[k] === undefined){ setLayout(k, r.loc); if (r.floor !== floorOf(p)) setFloorMove(k, r.floor); }
   });
+  // 取込の記録（翌日分）：どのPCからも「取込済み」が見えるように
+  if (i.next && window.X_NEXT && X_NEXT.raw) X_NEXT.raw.set(X_NEXT.raw.rRef("next/meta/imported"), {at:Date.now(), count:parsed.people.length, day:parsed.people.filter(p => p.shift === "日勤").length, night:parsed.people.filter(p => p.shift === "夜勤").length});
   render();
   A0(`${i.label}分として ${parsed.people.length}名を取り込みました。\n前日と同じ配置：${same}名　待機へ：${wait}名　外れた人：${gone}名`);
   X_logAdd(`コピペ取込（${i.label}分）${parsed.people.length}名：引き継ぎ${same}名・待機${wait}名・外れ${gone}名`);
