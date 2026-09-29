@@ -776,6 +776,7 @@ body.x-next .x-nbar{display:flex}
    ・翌日モードでは、名簿・配置・名前変更・FCST・特記事項などを next/ に読み書きする
    ・管理者リスト・工程マスタ・フロア・目標UPHは当日と共通
    ・「翌日分を当日に反映」（手動）で、翌日分を当日へ移す。翌日分は空になる
+   ・自動反映：朝5:00を過ぎたら、その日付の翌日分があれば当日へ移す（開いているPCのどれか1台が実行）
      当日の日付は dayMeta/date、翌日分の日付は next/meta/date に持つ
    ・反映前の当日分は prevDay/ に残し、反映したPCだけ「元に戻す」が使える
    ================================================================ */
@@ -826,27 +827,72 @@ body.x-next .x-nbar{display:flex}
     raw.set(raw.rRef("next/meta"), {date:X.date, created:Date.now()});
   }
   function watchMeta(){
-    raw.onValue(raw.rRef("dayMeta"), s => { X.day = s.val() || null; X.todayDate = X.day && X.day.date || ""; paint(); });
+    let lastPid;
+    raw.onValue(raw.rRef("dayMeta"), s => {
+      X.day = s.val() || null; X.todayDate = X.day && X.day.date || "";
+      const pid = X.day && X.day.promoteId || "";
+      // ほかのPCが自動反映した → このPCも読み直す（日付・配置を確実に切り替える）
+      if (lastPid !== undefined && pid && pid !== lastPid && X.day.auto && !autoBusy) setTimeout(() => location.reload(), 1500);
+      lastPid = pid; paint();
+    });
     raw.onValue(raw.rRef("next/meta"), s => { const v = s.val(); X.date = v && v.date || ""; X.has = !!X.date; X.imp = v && v.imported || null; paint(); });
     raw.onValue(raw.rRef("prevDay/meta"), s => { X.prev = s.val() || null; paint(); });
+    setTimeout(autoCheck, 3000);
+    setInterval(autoCheck, 60 * 1000);
   }
   const g = async k => (await raw.get(raw.rRef(k))).val();
   const writeKeys = async (base, data) => { for (const k of NEXT_KEYS){ const v = data ? data[k] : null; if (v == null) await raw.remove(raw.rRef(base + k)); else await raw.set(raw.rRef(base + k), v); } };
   const readKeys = async base => { const o = {}; for (const k of NEXT_KEYS) o[k] = await g(base + k); return o; };
 
   // 翌日分を当日に反映：当日分は prevDay/ へ、翌日分を当日へ、翌日分は空にする
+  async function doPromote(nmeta, auto){
+    const cur = await readKeys(""), nxt = await readKeys("next/");
+    const day = await g("dayMeta");
+    const curDate = (day && day.date) || X.today(), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await raw.set(raw.rRef("prevDay"), {meta:{date:curDate, promoteId:id, savedAt:Date.now(), auto:!!auto}, data:cur});
+    await writeKeys("", nxt);
+    await raw.set(raw.rRef("dayMeta"), {date:nmeta.date, promotedAt:Date.now(), promoteId:id, prevDate:curDate, auto:!!auto});
+    await raw.remove(raw.rRef("next"));
+    return id;
+  }
   X.promote = async () => {
     const nmeta = await g("next/meta");
     if (!nmeta || !nmeta.date){ alert("翌日分がまだありません"); return; }
-    const cur = await readKeys(""), nxt = await readKeys("next/");
-    const curDate = X.today(), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    await raw.set(raw.rRef("prevDay"), {meta:{date:curDate, promoteId:id, savedAt:Date.now()}, data:cur});
-    await writeKeys("", nxt);
-    await raw.set(raw.rRef("dayMeta"), {date:nmeta.date, promotedAt:Date.now(), promoteId:id, prevDate:curDate});
-    await raw.remove(raw.rRef("next"));
-    setToken(id);
+    setToken(await doPromote(nmeta, false));
     X.setMode("today");
   };
+  // 自動反映：5:00を過ぎ、翌日分の日付が今日で、当日分がまだ前の日なら反映する
+  //  複数のPCが開いていても1台だけが実行する（autoPromote/<日付> に名乗りを書き、2秒後に自分のままなら実行）
+  const AUTO_HOUR = 5;
+  let autoBusy = false;
+  async function autoCheck(){
+    if (autoBusy || !raw) return;
+    const now = new Date();
+    if (now.getHours() < AUTO_HOUR) return;
+    const today = ymd(now);
+    autoBusy = true;
+    try {
+      const nmeta = await g("next/meta"), day = await g("dayMeta");
+      if (!nmeta || nmeta.date !== today) return;                 // 今日の日付の翌日分がない → 何もしない（当日分はそのまま）
+      if (day && day.date && day.date >= today) return;          // もう今日（以降）の分が当日になっている
+      const lk = await g("autoPromote/" + today);
+      if (lk && (lk.done || Date.now() - (lk.at || 0) < 2 * 60 * 1000)) return;   // ほかのPCが実行中／実行済み（途中で止まった名乗りは2分で無効）
+      const me = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await raw.set(raw.rRef("autoPromote/" + today), {by:me, at:Date.now()});
+      await new Promise(r => setTimeout(r, 2000));
+      const lock = await g("autoPromote/" + today);
+      if (!lock || lock.by !== me) return;
+      const n2 = await g("next/meta"), d2 = await g("dayMeta");      // 待っている間に手動で反映されていないか確認
+      if (!n2 || n2.date !== today || (d2 && d2.date && d2.date >= today)) return;
+      await doPromote(n2, true);
+      await raw.set(raw.rRef("autoPromote/" + today), {by:me, at:Date.now(), done:true, date:today});
+      // 古い名乗りは消す
+      const all = await g("autoPromote") || {};
+      for (const k of Object.keys(all)) if (k < today) raw.remove(raw.rRef("autoPromote/" + k));
+      if (X.on) X.setMode("next"); else setTimeout(() => location.reload(), 300);
+    } catch (e) { console.error("autoPromote", e); }
+    finally { autoBusy = false; }
+  }
   // 元に戻す（反映したPCだけ）：今の当日分を翌日分へ戻し、前の当日分を当日へ戻す
   X.undo = async () => {
     const pm = await g("prevDay/meta"), day = await g("dayMeta");
@@ -864,6 +910,8 @@ body.x-next .x-nbar{display:flex}
   X.setMode = m => { try { sessionStorage.setItem(MODE_KEY, m); } catch (e) {} try { history.replaceState(null, "", "#" + m); } catch (e) {} location.reload(); };
   X.clearNext = () => raw.remove(raw.rRef("next")).then(() => { X.date = ""; stamped = false; });
   const canUndo = () => !!(token() && X.prev && X.day && X.prev.promoteId === token() && X.day.promoteId === token());
+  const AUTO_SEEN = "haichi_auto_seen";
+  const autoNote = () => { if (X.on || !X.day || !X.day.auto || X.day.date !== ymd(new Date())) return false; try { return localStorage.getItem(AUTO_SEEN) !== X.day.promoteId; } catch (e) { return true; } };
 
   // 2回押しのボタン
   function arm(btn, label, armLabel, fn){
@@ -887,7 +935,15 @@ body.x-next .x-nbar{display:flex}
     }
     const pro = document.getElementById("xNbPro"); if (pro && pro.dataset.arm !== "1") pro.textContent = `${short(X.nextDate())}分を当日に反映`;
     const ub = document.getElementById("xUbar");
-    if (ub){ ub.classList.toggle("show", canUndo() && !X.on); const ut = document.getElementById("xUbText"); if (ut && X.prev) ut.textContent = `このPCで ${X.label(X.today())}分を当日に反映しました（反映前：${X.label(X.prev.date)}分）。`; }
+    if (ub){
+      const man = canUndo() && !X.on, au = !man && autoNote();
+      ub.classList.toggle("show", man || au);
+      const ut = document.getElementById("xUbText"), ubb = document.getElementById("xUbBtn"), ubc = document.getElementById("xUbClose");
+      if (ubb) ubb.style.display = man ? "" : "none";
+      if (ubc) ubc.style.display = au ? "" : "none";
+      if (ut && man && X.prev) ut.textContent = `このPCで ${X.label(X.today())}分を当日に反映しました（反映前：${X.label(X.prev.date)}分）。`;
+      if (ut && au){ const d = new Date(X.day.promotedAt || Date.now()); ut.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())} に翌日分（${X.label(X.day.date)}）を自動で当日に反映しました。翌日分は空になっています。`; }
+    }
   }
   function ui(){
     document.body.classList.toggle("x-next", X.on);
@@ -902,14 +958,15 @@ body.x-next .x-nbar{display:flex}
     const stats = document.getElementById("stats");
     if (stats && !document.getElementById("xNbar")){
       const bar = document.createElement("div"); bar.className = "x-nbar"; bar.id = "xNbar";
-      bar.innerHTML = `<span>翌日</span><b id="xNbTitle"></b><span>の配置を作成中です。当日の配置には反映されません。</span><span class="x-imp" id="xNbImp"></span><span class="sp"></span>
+      bar.innerHTML = `<span>翌日</span><b id="xNbTitle"></b><span>の配置を作成中です。当日の配置には反映されません（その日の朝5:00に自動で当日に反映）。</span><span class="x-imp" id="xNbImp"></span><span class="sp"></span>
         <button type="button" class="pro" id="xNbPro"></button>`;
       stats.parentNode.insertBefore(bar, stats);
       arm(bar.querySelector("#xNbPro"), () => `${short(X.nextDate())}分を当日に反映`,
         () => `もう一度押すと ${short(X.nextDate())}分が当日になります（${short(X.today())}分は置き換わります）`, X.promote);
       const ub = document.createElement("div"); ub.className = "x-ubar"; ub.id = "xUbar";
-      ub.innerHTML = `<span id="xUbText"></span><span class="sp"></span><button type="button" id="xUbBtn">元に戻す</button>`;
+      ub.innerHTML = `<span id="xUbText"></span><span class="sp"></span><button type="button" id="xUbBtn">元に戻す</button><button type="button" id="xUbClose">閉じる</button>`;
       stats.parentNode.insertBefore(ub, stats);
+      ub.querySelector("#xUbClose").onclick = () => { try { localStorage.setItem(AUTO_SEEN, X.day && X.day.promoteId || ""); } catch (e) {} paint(); };
       arm(ub.querySelector("#xUbBtn"), () => "元に戻す", () => `もう一度押すと ${short(X.today())}分を翌日に戻し、${X.prev ? short(X.prev.date) : ""}分を当日に戻します`, X.undo);
     }
     paint();
@@ -2486,7 +2543,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.28.7";
+const APP_VERSION="2026.09.29.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
