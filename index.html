@@ -2543,7 +2543,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.29.3";
+const APP_VERSION="2026.09.29.4";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4185,7 +4185,7 @@ async function X_exportA3(dateStr, html, forPrint){
   html = html || X_buildA3(dateStr);
   if (html === null){ alert(curShift + "の出勤予定者がいません"); return; }
   const btn = document.querySelector(".btn.pdf"), orig = btn ? btn.textContent : "";
-  if (btn){ btn.textContent = "PDF生成中..."; btn.disabled = true; }
+  if (btn){ btn.textContent = forPrint ? "印刷準備中..." : "PDF生成中..."; btn.disabled = true; }
   const box = X_el("div", "xa3", html);
   box.style.cssText = "position:fixed;left:-99999px;top:0";
   document.body.appendChild(box);
@@ -4236,9 +4236,10 @@ async function X_buildA3For(dateStr, other){
   finally { DB.people = P0; layout = L0; floorMove = F0; nameOverride = O0; _roleAutoVer = -1; window.X_asNext = false; }
 }
 let X_pdfMenu = null;
-async function exportPDF(forPrint){
-  forPrint = forPrint === true;
-  if (X_pdfMenu){ X_pdfMenu.remove(); X_pdfMenu = null; if (!forPrint) return; }
+// PDFボタン：印刷ダイアログを開く（ダイアログの「PDFに保存」でPDFにもできる）
+async function exportPDF(fromSettings){
+  const forPrint = true;
+  if (X_pdfMenu){ X_pdfMenu.remove(); X_pdfMenu = null; if (fromSettings !== true) return; }
   const N = window.X_NEXT, btn = document.querySelector(".btn.pdf");
   if (!N || !N.raw) return X_exportA3(undefined, undefined, forPrint);
   const cur = N.on ? N.nextDate() : N.today(), oth = N.on ? N.today() : N.nextDate();
@@ -4246,7 +4247,7 @@ async function exportPDF(forPrint){
   m.innerHTML = `<h5><b>${forPrint ? "印刷" : "PDF出力"}</b>何日分を出しますか（${X_esc(curShift)}）</h5>` +
     [[cur, false], [oth, true]].sort((a, b) => a[0] < b[0] ? -1 : 1).map(([d, o]) => `<button type="button" class="x-pdfd" data-d="${d}" data-o="${o ? 1 : ""}">${X_esc(N.label(d))}分<small>${d === N.today() ? "当日" : "翌日"}${o ? "" : "・表示中"}</small></button>`).join("");
   document.body.appendChild(m); X_pdfMenu = m;
-  const r = forPrint ? {right:innerWidth / 2 + 120, bottom:120} : (btn || document.body).getBoundingClientRect();
+  const r = fromSettings === true || !btn ? {right:innerWidth / 2 + 120, bottom:120} : btn.getBoundingClientRect();
   m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.right - m.offsetWidth)) + "px"; m.style.top = (r.bottom + 6) + "px";
   m.querySelectorAll(".x-pdfd").forEach(b => b.onclick = async () => {
     m.remove(); X_pdfMenu = null;
