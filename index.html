@@ -2543,7 +2543,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.29.4";
+const APP_VERSION="2026.09.30.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3619,6 +3619,11 @@ header.hc3 .x-hmenu{display:inline-flex}
   .x-ftag{flex-direction:row;gap:8px;padding:6px}
   .x-area{overflow:visible}
 }
+.x-sfeed{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:9px;font-size:12.5px;font-weight:700;color:#14532d}
+.x-sfeed button{font:inherit;font-size:13px;font-weight:800;border:1px solid #16a34a;background:#16a34a;color:#fff;border-radius:7px;padding:6px 14px;cursor:pointer}
+.x-sfeed button.sub{background:#fff;color:#166534;font-size:12px;font-weight:700;padding:4px 10px}
+.x-sfeed .st{flex:1;min-width:180px;font-weight:600;color:#166534}
+.x-sfeed .st.ng{color:#b91c1c}
 </style>
 <script>
 /* ================================================================
@@ -4513,6 +4518,147 @@ render();
   if (window.ResizeObserver) new ResizeObserver(later).observe(hd);
   new MutationObserver(later).observe(document.body, {attributes:true, attributeFilter:["class"]});   // 全フロア／フロア別の切り替え
   X_fitHeader();
+})();
+
+/* ---------- シフト表（スプレッドシート）から取り込み ----------
+   ・コピペ取込の画面に「シフト表から読み込む」：取り込む日付の一覧（指定日出勤予定一覧と同じ内容）を読み込んで貼り付け欄に入れる。
+     そのあとはいつものコピペ取込と同じ（プレビュー→取込実行、前日の配置を引き継ぐ）
+   ・自動取込：設定した時刻を過ぎたら、明日の分をシフト表から自動で取り込む（開いているPCのどれか1台が実行）
+     明日の分をすでに取り込んでいる（手動・自動とも）ときはしない。シフト表にまだ明日の分がないときは15分ごとにやり直す
+   ・設定（全PC共通）：sheetFeed {url, key, hour}  url＝GASのWebアプリURL、key＝鍵、hour＝自動取込の時刻（空＝自動取込しない） */
+(function(){
+  const AUTO_KEY = "haichi_sheet_autoimp";
+  const pad = n => String(n).padStart(2, "0");
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const hm = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const raw = () => window.X_NEXT && X_NEXT.raw;
+  const g = async k => (await raw().get(raw().rRef(k))).val();
+  let CFG = null;
+  const cfg = async () => { if (!raw()) return {}; CFG = await g("sheetFeed") || {}; return CFG; };
+  async function fetchFeed(date){
+    const c = await cfg();
+    if (!c.url || !c.key) throw new Error("シフト表の読み込み先が設定されていません（「設定」から入れてください）");
+    const r = await fetch(`${c.url}${c.url.includes("?") ? "&" : "?"}key=${encodeURIComponent(c.key)}&date=${date}`, {cache:"no-store"});
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || "読み込めませんでした");
+    return j;
+  }
+  window.X_sheetFeed = fetchFeed;
+
+  // 設定（URL・鍵・自動取込の時刻）
+  async function editCfg(){
+    if (!raw()){ alert("まだ接続中です。少し待ってからもう一度押してください"); return; }
+    const c = await cfg();
+    const url = prompt("シフト表のWebアプリのURL（GASでデプロイしたURL）", c.url || ""); if (url === null) return;
+    const key = prompt("鍵（GASのコードの KEY と同じ文字列）", c.key || ""); if (key === null) return;
+    const h = prompt("毎日、明日の分を自動で取り込む時刻（0〜23の数字。空欄なら自動取込しない）", c.hour == null ? "20" : String(c.hour)); if (h === null) return;
+    const hour = h.trim() === "" ? null : Math.max(0, Math.min(23, parseInt(h, 10) || 0));
+    await raw().set(raw().rRef("sheetFeed"), {url:url.trim(), key:key.trim(), hour, at:Date.now()});
+    alert("保存しました（全PC共通）" + (hour == null ? "。自動取込はしません" : `。毎日 ${hour}:00 を過ぎたら明日の分を自動で取り込みます`));
+    paintRow();
+  }
+
+  // コピペ取込の画面に「シフト表から読み込む」を付ける
+  let row = null;
+  async function paintRow(){
+    if (!row) return;
+    const c = CFG || await cfg();
+    row.querySelector(".au").textContent = c.hour == null ? "自動取込：なし" : `自動取込：毎日 ${c.hour}:00`;
+  }
+  const X_openPaste2 = openPasteModal;
+  openPasteModal = function(){
+    X_openPaste2();
+    const body = document.querySelector("#pasteModal .modal-body"); if (!body) return;
+    row = document.getElementById("xSheetFeed");
+    if (!row){
+      row = X_el("div", "x-sfeed"); row.id = "xSheetFeed";
+      row.innerHTML = '<button type="button" class="go">シフト表から読み込む</button><span class="st">スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込みます</span><span class="au"></span><button type="button" class="sub cf">設定</button>';
+      const bn = document.getElementById("xPasteDate");
+      body.insertBefore(row, bn ? bn.nextSibling : body.firstChild);
+      row.querySelector(".cf").onclick = editCfg;
+      row.querySelector(".go").onclick = async () => {
+        const st = row.querySelector(".st"), i = X_pasteInfo();
+        st.className = "st"; st.textContent = `${i.label}分を読み込み中…`;
+        try {
+          const j = await fetchFeed(i.date);
+          if (!j.total){ st.className = "st ng"; st.textContent = `${i.label}分はシフト表にまだありません（LH調整への転記がまだの可能性）`; return; }
+          document.getElementById("pasteArea").value = j.text;
+          st.textContent = `${i.label}分を読み込みました：日勤 ${j.day}名／夜勤 ${j.night}名${j.in ? `／IN ${j.in}名` : ""}（${hm(j.at)}）。内容を確認して「取込実行」を押してください`;
+          try { previewPaste(); } catch (e) {}
+        } catch (e){ st.className = "st ng"; st.textContent = e.message; }
+      };
+    }
+    const st = row.querySelector(".st"); st.className = "st"; st.textContent = "スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込みます";
+    paintRow();
+  };
+  window.openPasteModal = openPasteModal;
+
+  // 自動取込：設定時刻を過ぎたら、明日の分がまだ取り込まれていなければ取り込む
+  let busy = false;
+  async function autoCheck(){
+    if (busy || !raw()) return;
+    const now = new Date();
+    busy = true;
+    try {
+      const c = await cfg();
+      if (!c.url || !c.key || c.hour == null || now.getHours() < c.hour) return;
+      const tmr = new Date(now); tmr.setDate(tmr.getDate() + 1);
+      const D = ymd(tmr);
+      const nm = await g("next/meta");
+      if (nm && nm.date && nm.date !== D) return;              // 別の日付の翌日分を作業中 → 触らない
+      if (nm && nm.imported) return;                           // 明日の分は取込済み（手動・自動とも）
+      const lk = await g("autoImport/" + D);
+      if (lk && (lk.done || Date.now() - (lk.at || 0) < (lk.empty ? 15 : 3) * 60 * 1000)) return;   // 実行中・実行済み、またはシフト表が空で待ち
+      const me = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await raw().set(raw().rRef("autoImport/" + D), {by:me, at:Date.now()});
+      await new Promise(r => setTimeout(r, 2000));
+      const lock = await g("autoImport/" + D);
+      if (!lock || lock.by !== me) return;
+      let j;
+      try { j = await fetchFeed(D); } catch (e){ await raw().set(raw().rRef("autoImport/" + D), {by:me, at:Date.now(), empty:true, error:e.message}); return; }
+      if (!j.total){ await raw().set(raw().rRef("autoImport/" + D), {by:me, at:Date.now(), empty:true}); return; }
+      // 翌日の画面で取り込む（当日の画面を開いていたPCは、取り込んだあと当日の画面に戻す）
+      try { sessionStorage.setItem(AUTO_KEY, JSON.stringify({date:D, text:j.text, by:me, back:!X_NEXT.on})); } catch (e) { return; }
+      if (X_NEXT.on) runPending(); else X_NEXT.setMode("next");
+    } catch (e) { console.error("sheet autoImport", e); }
+    finally { busy = false; }
+  }
+  async function runPending(){
+    let job = null;
+    try { job = JSON.parse(sessionStorage.getItem(AUTO_KEY) || "null"); sessionStorage.removeItem(AUTO_KEY); } catch (e) {}
+    if (!job || !X_NEXT.on) return;
+    for (let n = 0; n < 60 && !raw(); n++) await new Promise(r => setTimeout(r, 500));   // 接続を待つ
+    // 管理者・工程マスタの読み込みが終わるまで待つ（途中で取り込むと管理者が名簿から抜けるため）
+    const fa = await g("admins"), nA = Array.isArray(fa) ? fa.length : 0;
+    let ready = false;
+    for (let n = 0; n < 60; n++){
+      const hasM = DB.master && Object.values(DB.master).some(x => Array.isArray(x) && x.length);
+      if (hasM && DB.people.filter(p => p.admin).length === nA){ ready = true; break; }
+      await new Promise(r => setTimeout(r, 500));
+    }
+    await new Promise(r => setTimeout(r, 1500));
+    if (!ready){ console.warn("sheet autoImport: 読み込みが終わらないため中止"); await raw().set(raw().rRef("autoImport/" + job.date), {by:job.by, at:Date.now(), empty:true, error:"not ready"}); if (job.back) X_NEXT.setMode("today"); return; }
+    const i = X_pasteInfo();
+    if (i.date !== job.date){ console.warn("sheet autoImport: 日付が違うため中止", i.date, job.date); if (job.back) X_NEXT.setMode("today"); return; }
+    const nm = await g("next/meta");
+    if (!(nm && nm.imported)){
+      openPasteModal();
+      document.getElementById("pasteArea").value = job.text;
+      const C0 = window.confirm, A0 = window.alert;
+      window.confirm = () => true; window.alert = () => {};
+      try { await execPaste(); } finally { window.confirm = C0; window.alert = A0; }
+      try { closePasteModal(); } catch (e) {}
+      await new Promise(r => setTimeout(r, 1500));
+      try { await raw().update(raw().rRef("next/meta/imported"), {auto:true}); } catch (e) {}
+      try { X_logAdd(`シフト表から自動取込（${i.label}分）`); } catch (e) {}
+    }
+    await raw().set(raw().rRef("autoImport/" + job.date), {by:job.by, at:Date.now(), done:true});
+    const all = await g("autoImport") || {};
+    for (const k of Object.keys(all)) if (k < job.date) raw().remove(raw().rRef("autoImport/" + k));
+    if (job.back) setTimeout(() => X_NEXT.setMode("today"), 1500);
+  }
+  setTimeout(() => { runPending(); autoCheck(); }, 5000);
+  setInterval(autoCheck, 60 * 1000);
 })();
 </script>
 
