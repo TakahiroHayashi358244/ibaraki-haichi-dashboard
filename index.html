@@ -2543,7 +2543,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.30.1";
+const APP_VERSION="2026.09.30.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4397,8 +4397,10 @@ execPaste = async function(){
   window.alert = () => {};
   try { X_execPasteOrig(); } finally { window.confirm = C0; window.alert = A0; }
   if (!ok) return;
+  // 配置の決め方：直近2週間の同じ曜日区分（平日／土日）で一番多く配置された場所 → なければ前日の配置 → なければ待機
+  let stat = null; try { stat = window.X_statPlaces ? await X_statPlaces(i.date) : null; } catch (e) { console.warn("statPlaces", e); }
   parsed.people.forEach((p, n) => {
-    const k = X_key(p), r = hits[n];
+    const k = X_key(p), st = stat && stat.get(X_histKey(p)), r = st || hits[n];
     if (r && !NONWORK_LOCS.includes(r.loc)){
       setLayout(k, r.loc);
       if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor);
@@ -4659,6 +4661,97 @@ render();
   }
   setTimeout(() => { runPending(); autoCheck(); }, 5000);
   setInterval(autoCheck, 60 * 1000);
+})();
+
+/* ---------- 配置の記録と統計（取り込みのときの配置に使う） ----------
+   ・毎日、日勤は9:00、夜勤は21:00の時点の当日の配置を history/<日付>/<day|night> に記録する（開いているPCのどれか1台）
+     記録するのは作業している場所だけ（待機・欠勤・休日は記録しない）。30日より古い記録は消す
+   ・取り込みのとき：取り込む日付が平日なら直近2週間の平日、土日なら直近2週間の土日の記録から、
+     その人が一番多くいた場所（同じ回数なら新しい日）に置く。記録がない人は前日の配置、それもなければ待機 */
+function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || "").replace(/\s/g, "")).replace(/[.#$\[\]\/]/g, "_"); }
+(function(){
+  const HIST_DAYS = 14, KEEP_DAYS = 30, SNAP = {day:9, night:21};
+  const pad = n => String(n).padStart(2, "0");
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const addDay = (s, n) => { const d = new Date(s + "T00:00:00"); d.setDate(d.getDate() + n); return ymd(d); };
+  const isWeekend = s => { const w = new Date(s + "T00:00:00").getDay(); return w === 0 || w === 6; };
+  const raw = () => window.X_NEXT && X_NEXT.raw;
+  const g = async k => (await raw().get(raw().rRef(k))).val();
+
+  // 当日の配置（翌日の画面を開いていても、当日分を読む）
+  async function todayPlaces(shift){
+    const ro = await g("roster"), cu = await g("custom");
+    const people = [...(Array.isArray(ro) ? ro : Object.values(ro || {})).filter(Boolean), ...Object.values(cu || {}).filter(Boolean)].filter(p => p && !p.admin && p.shift === shift);
+    const lay = await g("layout") || {}, fm = await g("floorMove") || {};
+    const L0 = layout, F0 = floorMove, out = {};
+    layout = lay; floorMove = fm; window.X_refCalc = true;
+    try {
+      people.forEach(p => { const loc = locOf(p); if (!NONWORK_LOCS.includes(loc)) out[X_histKey(p)] = {loc, floor:floorOf(p) || ""}; });
+    } finally { layout = L0; floorMove = F0; window.X_refCalc = false; }
+    return out;
+  }
+  let busy = false;
+  async function snapCheck(){
+    if (busy || !raw()) return;
+    const now = new Date(), today = ymd(now);
+    if (window.X_NEXT && X_NEXT.today && X_NEXT.today() !== today) return;   // 当日分がまだ今日になっていない（朝の入れ替え前など）
+    busy = true;
+    try {
+      for (const shift of ["day", "night"]){
+        if (now.getHours() < SNAP[shift]) continue;
+        const path = `history/${today}/${shift}`;
+        if (await g(path + "/at")) continue;                                  // 記録済み
+        const lk = await g(`histLock/${today}_${shift}`);
+        if (lk && Date.now() - (lk.at || 0) < 2 * 60 * 1000) continue;
+        const me = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        await raw().set(raw().rRef(`histLock/${today}_${shift}`), {by:me, at:Date.now()});
+        await new Promise(r => setTimeout(r, 2000));
+        const lock = await g(`histLock/${today}_${shift}`);
+        if (!lock || lock.by !== me) continue;
+        const places = await todayPlaces(shift === "day" ? "日勤" : "夜勤");
+        await raw().set(raw().rRef(path), {at:Date.now(), n:Object.keys(places).length, p:places});
+        await raw().remove(raw().rRef(`histLock/${today}_${shift}`));
+      }
+      // 古い記録を消す
+      const old = addDay(today, -KEEP_DAYS);
+      const idx = await g("histIndex") || {};
+      idx[today] = true;
+      for (const k of Object.keys(idx)) if (k < old){ await raw().remove(raw().rRef("history/" + k)); delete idx[k]; }
+      await raw().set(raw().rRef("histIndex"), idx);
+    } catch (e) { console.error("history snap", e); }
+    finally { busy = false; }
+  }
+  // 取り込む日付 date の配置の統計：人ごとに一番多い場所
+  window.X_statPlaces = async function(date){
+    if (!raw()) return null;
+    const we = isWeekend(date), cnt = new Map();
+    for (let n = 1; n <= HIST_DAYS; n++){
+      const d = addDay(date, -n);
+      if (isWeekend(d) !== we) continue;
+      const h = await g("history/" + d);
+      if (!h) continue;
+      ["day", "night"].forEach(sh => {
+        const p = h[sh] && h[sh].p; if (!p) return;
+        for (const [k, v] of Object.entries(p)){
+          if (!v || !v.loc) continue;
+          const id = v.loc + "\u0001" + (v.floor || "");
+          let m = cnt.get(k); if (!m){ m = new Map(); cnt.set(k, m); }
+          const c = m.get(id) || {n:0, last:"", loc:v.loc, floor:v.floor || ""};
+          c.n++; if (d > c.last) c.last = d;
+          m.set(id, c);
+        }
+      });
+    }
+    const out = new Map();
+    cnt.forEach((m, k) => {
+      let best = null;
+      m.forEach(c => { if (!best || c.n > best.n || (c.n === best.n && c.last > best.last)) best = c; });
+      if (best) out.set(k, {loc:best.loc, floor:best.floor, n:best.n});
+    });
+    return out;
+  };
+  setTimeout(snapCheck, 8000);
+  setInterval(snapCheck, 60 * 1000);
 })();
 </script>
 
