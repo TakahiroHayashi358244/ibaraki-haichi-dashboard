@@ -2543,7 +2543,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.09.30.2";
+const APP_VERSION="2026.10.01.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3624,6 +3624,9 @@ header.hc3 .x-hmenu{display:inline-flex}
 .x-sfeed button.sub{background:#fff;color:#166534;font-size:12px;font-weight:700;padding:4px 10px}
 .x-sfeed .st{flex:1;min-width:180px;font-weight:600;color:#166534}
 .x-sfeed .st.ng{color:#b91c1c}
+.x-c.x-new,.card.x-new{order:-1;outline:3px solid #f97316!important;outline-offset:1px;position:relative;animation:xNewPulse 1s ease-in-out infinite alternate}
+.x-c.x-new::after,.card.x-new::after{content:"NEW";position:absolute;top:-8px;right:-6px;background:#f97316;color:#fff;font-size:9px;font-weight:900;line-height:1;padding:2px 4px;border-radius:4px;pointer-events:none}
+@keyframes xNewPulse{from{box-shadow:0 0 0 0 rgba(249,115,22,.55)}to{box-shadow:0 0 0 6px rgba(249,115,22,0)}}
 </style>
 <script>
 /* ================================================================
@@ -4377,6 +4380,17 @@ async function X_refPlaces(){
   } finally { layout = L0; floorMove = F0; window.X_refCalc = false; }
   return {count:people.length, adm, find:p => out.get(`${p.shift}|${p.role}|${p.name}`) || byName.get(p.shift + "|" + String(p.name || "").replace(/\s/g, "")) || null};   // 同じシフトの中で探す
 }
+// 新しく入った人の目印（取り込んだPCだけ・約20秒）
+let X_NEW = new Set(), X_newT = null, X_newIv = null;
+function X_markNew(keys){
+  X_NEW = new Set(keys);
+  const paint = () => document.querySelectorAll(".x-c[data-uidkey],.card[data-uidkey]").forEach(c => c.classList.toggle("x-new", X_NEW.has(c.dataset.uidkey)));
+  clearInterval(X_newIv); clearTimeout(X_newT);
+  paint();
+  if (!X_NEW.size) return; X_newIv = setInterval(paint, 300);
+  X_newT = setTimeout(() => { X_NEW = new Set(); paint(); clearInterval(X_newIv); }, 20000);
+}
+window.X_markNew = X_markNew;
 const X_execPasteOrig = execPaste;
 execPaste = async function(){
   const md = document.getElementById("pasteMode"); if (md) md.value = "replace";
@@ -4393,19 +4407,40 @@ execPaste = async function(){
   const C0 = window.confirm, A0 = window.alert; let ok = false;
   const msg = `【${i.label}分として取り込みます】${i.next ? "" : "\n※稼働中の当日の配置が変わります"}\n\n` +
     `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者も当日と同じ配置）`;
+  // 取り込む前の、この画面（当日または翌日分）の配置。名簿にいた人は、取り込み直してもこの配置のまま（待機・欠勤なども含めて）
+  const pre = new Map(), preByName = new Map();
+  DB.people.filter(p => !p.admin).forEach(p => {
+    const v = {loc:locOf(p), floor:floorOf(p)};
+    pre.set(`${p.shift}|${p.role}|${p.name}`, v);
+    const nk = p.shift + "|" + String(p.name || "").replace(/\s/g, "");
+    preByName.set(nk, preByName.has(nk) ? null : v);
+  });
+  const preFind = p => pre.get(`${p.shift}|${p.role}|${p.name}`) || preByName.get(p.shift + "|" + String(p.name || "").replace(/\s/g, "")) || null;
+  const pres = parsed.people.map(preFind);
+  const goneN = Math.max(0, pre.size - new Set(pres.filter(Boolean)).size);   // 取り込む前にいて、今回の名簿にない人
   window.confirm = () => { ok = C0(msg); return ok; };
   window.alert = () => {};
   try { X_execPasteOrig(); } finally { window.confirm = C0; window.alert = A0; }
   if (!ok) return;
-  // 配置の決め方：直近2週間の同じ曜日区分（平日／土日）で一番多く配置された場所 → なければ前日の配置 → なければ待機
+  // 配置の決め方
+  //  ・取り込む前からこの画面の名簿にいた人：その配置のまま（待機の人は待機のまま）
+  //  ・新しく名簿に入った人：統計（直近2週間の同じ曜日区分で一番多い場所）→ 翌日分なら当日の配置 → 待機
+  //    どこに入ったか分かるように、いったん待機に入れてから、少しあとで配置する
   let stat = null; try { stat = window.X_statPlaces ? await X_statPlaces(i.date) : null; } catch (e) { console.warn("statPlaces", e); }
+  const moves = [];
   parsed.people.forEach((p, n) => {
-    const k = X_key(p), st = stat && stat.get(X_histKey(p)), r = st || hits[n];
-    if (r && !NONWORK_LOCS.includes(r.loc)){
-      setLayout(k, r.loc);
-      if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor);
-    } else setLayout(k, "WAIT");
+    const k = X_key(p), pv = pres[n];
+    if (pv){                                                    // 前からいた人
+      setLayout(k, pv.loc);
+      if (pv.floor && pv.floor !== p.floor) setFloorMove(k, pv.floor);
+      return;
+    }
+    const st = stat && stat.get(X_histKey(p)), h = hits[n];
+    const r = st || (i.next && h && !NONWORK_LOCS.includes(h.loc) ? h : null);
+    setLayout(k, "WAIT");                                       // 新しい人は、まず待機
+    if (r && !NONWORK_LOCS.includes(r.loc)) moves.push({k, p, r});
   });
+  const newN = pres.filter(v => !v).length;
   // 管理者も当日と同じ場所（待機・休日なども含めてそのまま）。翌日分ですでに動かした管理者はそのまま
   if (i.next) DB.people.filter(p => p.admin).forEach(p => {
     const k = X_key(p), r = ref.adm.get(k); if (!r) return;
@@ -4413,9 +4448,17 @@ execPaste = async function(){
   });
   // 取込の記録（翌日分）：どのPCからも「取込済み」が見えるように
   if (i.next && window.X_NEXT && X_NEXT.raw) X_NEXT.raw.set(X_NEXT.raw.rRef("next/meta/imported"), {at:Date.now(), count:parsed.people.length, day:parsed.people.filter(p => p.shift === "日勤").length, night:parsed.people.filter(p => p.shift === "夜勤").length});
+  // 新しく入った人は、しばらくオレンジの枠と「NEW」で目立たせる（待機では先頭に並べる）
+  X_markNew(parsed.people.filter((p, n) => !pres[n]).map(p => X_key(p)));
   render();
-  A0(`${i.label}分として ${parsed.people.length}名を取り込みました。\n前日と同じ配置：${same}名　待機へ：${wait}名　外れた人：${gone}名`);
-  X_logAdd(`コピペ取込（${i.label}分）${parsed.people.length}名：引き継ぎ${same}名・待機${wait}名・外れ${gone}名`);
+  // 新しい人を待機から配置先へ（2.5秒後）
+  if (moves.length){
+    await new Promise(r => setTimeout(r, 2500));
+    moves.forEach(({k, p, r}) => { setLayout(k, r.loc); if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor); });
+    render();
+  }
+  A0(`${i.label}分として ${parsed.people.length}名を取り込みました。\n前からいた人：${parsed.people.length - newN}名（配置はそのまま）\n新しく入った人：${newN}名（配置 ${moves.length}名・待機 ${newN - moves.length}名）\n名簿から外れた人：${goneN}名`);
+  X_logAdd(`コピペ取込（${i.label}分）${parsed.people.length}名：そのまま${parsed.people.length - newN}名・新規${newN}名（配置${moves.length}・待機${newN - moves.length}）・外れ${goneN}名`);
 };
 window.execPaste = execPaste;
 
