@@ -2552,7 +2552,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.10.02.1";
+const APP_VERSION="2026.10.02.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4367,7 +4367,10 @@ setTimeout(() => {
 // 管理者：まだ配置していない管理者は「管理者」Zoneに置く（当日・翌日とも。翌日分をリセットした直後も）
 //  管理者Zone（ADMIN）に置いた人はそこに出す。otherや工程へ動かせば、そこが配置になる
 const X_locOf0 = locOf;
+// 取込直後の見せ方：新しく入った人を、このPCの画面だけ少しのあいだ待機に見せる（保存される配置は最初から配置先）
+let X_SHOW_WAIT = new Set();
 locOf = function(p){
+  if (p && X_SHOW_WAIT.size && !window.X_refCalc && X_SHOW_WAIT.has(X_key(p))) return "WAIT";
   const v = p ? layout[X_key(p)] : undefined;
   if (v === "ADMIN") return "ADMIN";
   if (p && p.admin && v === undefined) return "ADMIN";
@@ -4434,7 +4437,11 @@ execPaste = async function(){
     const nk = p.shift + "|" + String(p.name || "").replace(/\s/g, "");
     preByName.set(nk, preByName.has(nk) ? null : v);
   });
-  const preFind = p => pre.get(`${p.shift}|${p.role}|${p.name}`) || preByName.get(p.shift + "|" + String(p.name || "").replace(/\s/g, "")) || null;
+  // 前の画面で作業場所に1人もいない（全員が待機など）ときは、待機は「前の配置」として使わない
+  //  （取込の途中で画面が読み直されて、全員が待機のまま残ったときに直すため）
+  const preWork = [...pre.values()].some(v => v && !NONWORK_LOCS.includes(v.loc));
+  const preFind0 = p => pre.get(`${p.shift}|${p.role}|${p.name}`) || preByName.get(p.shift + "|" + String(p.name || "").replace(/\s/g, "")) || null;
+  const preFind = p => { const v = preFind0(p); return v && !preWork && v.loc === "WAIT" ? null : v; };
   const pres = parsed.people.map(preFind);
   const goneN = Math.max(0, pre.size - new Set(pres.filter(Boolean)).size);   // 取り込む前にいて、今回の名簿にない人
   window.confirm = () => { ok = C0(msg); return ok; };
@@ -4447,6 +4454,8 @@ execPaste = async function(){
   //    どこに入ったか分かるように、いったん待機に入れてから、少しあとで配置する
   let stat = null; try { stat = window.X_statPlaces ? await X_statPlaces(i.date) : null; } catch (e) { console.warn("statPlaces", e); }
   const moves = [];
+  X_SHOW_WAIT = new Set();
+  setTimeout(() => { if (X_SHOW_WAIT.size){ X_SHOW_WAIT = new Set(); render(); } }, 15000);   // 念のため（見せ方だけなので消えても配置は変わらない）
   parsed.people.forEach((p, n) => {
     const k = X_key(p), pv = pres[n];
     if (pv){                                                    // 前からいた人
@@ -4456,8 +4465,11 @@ execPaste = async function(){
     }
     const h = hits[n];
     const r = stat ? stat.get(X_histKey(p), i.next ? h : null) : (i.next && h && !NONWORK_LOCS.includes(h.loc) ? h : null);   // 前日（＝今の当日）の配置＋過去の記録
-    setLayout(k, "WAIT");                                       // 新しい人は、まず待機
-    if (r && !NONWORK_LOCS.includes(r.loc)) moves.push({k, p, r});
+    if (r && !NONWORK_LOCS.includes(r.loc)){                   // 配置先はすぐ保存。画面だけ、いったん待機に見せる
+      X_SHOW_WAIT.add(k);
+      setLayout(k, r.loc); if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor);
+      moves.push({k, p, r});
+    } else setLayout(k, "WAIT");
   });
   const newN = pres.filter(v => !v).length;
   // 管理者：この画面でまだ配置していない管理者だけ決める（すでに置いた管理者はそのまま）
@@ -4479,7 +4491,7 @@ execPaste = async function(){
     render();
     await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
     await new Promise(r => setTimeout(r, 2500));
-    moves.forEach(({k, p, r}) => { setLayout(k, r.loc); if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor); });
+    X_SHOW_WAIT = new Set();
     render();
   }
   A0(`${i.label}分として ${parsed.people.length}名を取り込みました。\n前からいた人：${parsed.people.length - newN}名（配置はそのまま）\n新しく入った人：${newN}名（配置 ${moves.length}名・待機 ${newN - moves.length}名）\n名簿から外れた人：${goneN}名`);
