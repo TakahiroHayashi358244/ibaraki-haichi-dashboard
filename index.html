@@ -4453,6 +4453,10 @@ execPaste = async function(){
   render();
   // 新しい人を待機から配置先へ（2.5秒後）
   if (moves.length){
+    // 名簿の保存に伴う再描画が落ち着いて、待機に入った様子が画面に出てから 2.5 秒待つ
+    await new Promise(r => (window.requestIdleCallback ? requestIdleCallback(() => r(), {timeout:4000}) : setTimeout(r, 300)));
+    render();
+    await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
     await new Promise(r => setTimeout(r, 2500));
     moves.forEach(({k, p, r}) => { setLayout(k, r.loc); if (r.floor && r.floor !== p.floor) setFloorMove(k, r.floor); });
     render();
