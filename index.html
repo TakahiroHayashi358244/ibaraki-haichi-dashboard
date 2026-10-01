@@ -2552,7 +2552,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.10.01.6";
+const APP_VERSION="2026.10.02.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4425,7 +4425,7 @@ execPaste = async function(){
   const gone = Math.max(0, ref.count - kept.size);
   const C0 = window.confirm, A0 = window.alert; let ok = false;
   const msg = `【${i.label}分として取り込みます】${i.next ? "" : "\n※稼働中の当日の配置が変わります"}\n\n` +
-    `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者は記録で一番多い配置。記録がなければ当日と同じ配置）`;
+    `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者も、前日の配置＋過去の記録で一番多い配置）`;
   // 取り込む前の、この画面（当日または翌日分）の配置。名簿にいた人は、取り込み直してもこの配置のまま（待機・欠勤なども含めて）
   const pre = new Map(), preByName = new Map();
   DB.people.filter(p => !p.admin).forEach(p => {
@@ -4443,7 +4443,7 @@ execPaste = async function(){
   if (!ok) return;
   // 配置の決め方
   //  ・取り込む前からこの画面の名簿にいた人：その配置のまま（待機の人は待機のまま）
-  //  ・新しく名簿に入った人：統計（直近2週間の同じ曜日区分で一番多い場所）→ 翌日分なら当日の配置 → 待機
+  //  ・新しく名簿に入った人：前日の配置（曜日に関係なく）＋直近2週間の同じ曜日区分の記録で一番多い場所 → なければ待機
   //    どこに入ったか分かるように、いったん待機に入れてから、少しあとで配置する
   let stat = null; try { stat = window.X_statPlaces ? await X_statPlaces(i.date) : null; } catch (e) { console.warn("statPlaces", e); }
   const moves = [];
@@ -4454,8 +4454,8 @@ execPaste = async function(){
       if (pv.floor && pv.floor !== p.floor) setFloorMove(k, pv.floor);
       return;
     }
-    const st = stat && stat.get(X_histKey(p)), h = hits[n];
-    const r = st || (i.next && h && !NONWORK_LOCS.includes(h.loc) ? h : null);
+    const h = hits[n];
+    const r = stat ? stat.get(X_histKey(p), i.next ? h : null) : (i.next && h && !NONWORK_LOCS.includes(h.loc) ? h : null);   // 前日（＝今の当日）の配置＋過去の記録
     setLayout(k, "WAIT");                                       // 新しい人は、まず待機
     if (r && !NONWORK_LOCS.includes(r.loc)) moves.push({k, p, r});
   });
@@ -4464,7 +4464,7 @@ execPaste = async function(){
   //  統計（直近2週間の同じ曜日区分で一番多い場所）→ 翌日分なら当日の配置 → 管理者Zone
   DB.people.filter(p => p.admin).forEach(p => {
     const k = X_key(p); if (layout[k] !== undefined) return;
-    const r = (stat && stat.get(X_histKey(p))) || (i.next ? ref.adm.get(k) : null); if (!r || !r.loc) return;
+    const r = stat ? stat.get(X_histKey(p), i.next ? ref.adm.get(k) : null) : (i.next ? ref.adm.get(k) : null); if (!r || !r.loc) return;
     setLayout(k, r.loc); if (r.floor && r.floor !== floorOf(p)) setFloorMove(k, r.floor);
   });
   // 取込の記録（翌日分）：どのPCからも「取込済み」が見えるように
@@ -4737,8 +4737,8 @@ render();
 /* ---------- 配置の記録と統計（取り込みのときの配置に使う） ----------
    ・毎日、日勤は9:00、夜勤は21:00の時点の当日の配置を history/<日付>/<day|night> に記録する（開いているPCのどれか1台）
      記録するのは作業している場所だけ（待機・欠勤・休日は記録しない）。管理者も記録する（管理者Zoneも場所として記録）。30日より古い記録は消す
-   ・取り込みのとき：取り込む日付が平日なら直近2週間の平日、土日なら直近2週間の土日の記録から、
-     その人が一番多くいた場所（同じ回数なら新しい日）に置く。記録がない人は前日の配置、それもなければ待機 */
+   ・取り込みのとき：前日（曜日に関係なく。土曜なら金曜）の配置と、直近2週間の同じ曜日区分（平日／土日）の記録を合わせて、
+     その人が一番多くいた場所（同じ回数なら新しい日＝前日）に置く。どちらもない人は待機 */
 function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || "").replace(/\s/g, "")).replace(/[.#$\[\]\/]/g, "_"); }
 (function(){
   const HIST_DAYS = 14, KEEP_DAYS = 30, SNAP = {day:9, night:21};
@@ -4794,33 +4794,43 @@ function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || ""
     finally { busy = false; }
   }
   // 取り込む日付 date の配置の統計：人ごとに一番多い場所
+  //  ・前日（date の1日前）は曜日に関係なく必ず入れる（土曜なら金曜、日曜なら土曜、月曜なら日曜）
+  //    前日の配置は、呼び出し側から渡されたもの（翌日分の取込なら今の当日の配置）を優先し、なければ前日の記録
+  //  ・それ以外は直近2週間の同じ曜日区分（平日／土日）の記録
+  //  ・回数が一番多い場所。同じ回数なら新しい日（前日が一番新しい）
   window.X_statPlaces = async function(date){
     if (!raw()) return null;
-    const we = isWeekend(date), cnt = new Map();
+    const we = isWeekend(date), prevD = addDay(date, -1), cnt = new Map(), prevHist = {};
+    const vote = (k, v, d) => {
+      if (!v || !v.loc || NONWORK_LOCS.includes(v.loc)) return;
+      const id = v.loc + "\u0001" + (v.floor || "");
+      let m = cnt.get(k); if (!m){ m = new Map(); cnt.set(k, m); }
+      const c = m.get(id) || {n:0, last:"", loc:v.loc, floor:v.floor || ""};
+      c.n++; if (d > c.last) c.last = d;
+      m.set(id, c);
+    };
     for (let n = 1; n <= HIST_DAYS; n++){
       const d = addDay(date, -n);
-      if (isWeekend(d) !== we) continue;
+      if (d !== prevD && isWeekend(d) !== we) continue;
       const h = await g("history/" + d);
       if (!h) continue;
       ["day", "night"].forEach(sh => {
         const p = h[sh] && h[sh].p; if (!p) return;
-        for (const [k, v] of Object.entries(p)){
-          if (!v || !v.loc) continue;
-          const id = v.loc + "\u0001" + (v.floor || "");
-          let m = cnt.get(k); if (!m){ m = new Map(); cnt.set(k, m); }
-          const c = m.get(id) || {n:0, last:"", loc:v.loc, floor:v.floor || ""};
-          c.n++; if (d > c.last) c.last = d;
-          m.set(id, c);
-        }
+        if (d === prevD) Object.assign(prevHist, p);        // 前日分はあとで（渡された前日の配置と重ならないように）
+        else for (const [k, v] of Object.entries(p)) vote(k, v, d);
       });
     }
-    const out = new Map();
-    cnt.forEach((m, k) => {
-      let best = null;
-      m.forEach(c => { if (!best || c.n > best.n || (c.n === best.n && c.last > best.last)) best = c; });
-      if (best) out.set(k, {loc:best.loc, floor:best.floor, n:best.n});
-    });
-    return out;
+    const pick = m => { let best = null; m && m.forEach(c => { if (!best || c.n > best.n || (c.n === best.n && c.last > best.last)) best = c; }); return best ? {loc:best.loc, floor:best.floor, n:best.n} : null; };
+    // get(人のキー, 前日の配置{loc,floor}｜なし)
+    return {get(k, prev){
+      const base = cnt.get(k), m = new Map(base ? [...base].map(([id, c]) => [id, Object.assign({}, c)]) : []);
+      const pv = prev && prev.loc && !NONWORK_LOCS.includes(prev.loc) ? prev : prevHist[k];
+      if (pv && pv.loc && !NONWORK_LOCS.includes(pv.loc)){
+        const id = pv.loc + "\u0001" + (pv.floor || ""), c = m.get(id) || {n:0, last:"", loc:pv.loc, floor:pv.floor || ""};
+        c.n++; c.last = prevD; m.set(id, c);
+      }
+      return pick(m);
+    }};
   };
   setTimeout(snapCheck, 8000);
   setInterval(snapCheck, 60 * 1000);
