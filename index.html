@@ -491,7 +491,6 @@ input[type=file]{display:none}
       <button class="tab active" data-shift="日勤" onclick="setShift('日勤',this)">日勤</button>
       <button class="tab night" data-shift="夜勤" onclick="setShift('夜勤',this)">夜勤</button>
     </div>
-    <button class="btn" onclick="document.getElementById('file').click()">名簿読込</button>
     <input type="file" id="file" accept=".xlsx" onchange="loadFile(event)">
     <button class="btn paste" onclick="openPasteModal()" title="シフト表をコピペで取込">📋 コピペ取込</button>
     <button class="btn add" onclick="openAdd()">+ 追加</button>
@@ -2543,7 +2542,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.10.01.3";
+const APP_VERSION="2026.10.01.4";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4621,7 +4620,7 @@ render();
     row = document.getElementById("xSheetFeed");
     if (!row){
       row = X_el("div", "x-sfeed"); row.id = "xSheetFeed";
-      row.innerHTML = '<button type="button" class="go">シフト表から読み込む</button><span class="st">スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込みます</span><span class="au"></span><button type="button" class="sub cf">設定</button>';
+      row.innerHTML = '<button type="button" class="go">シフト表から取り込む</button><span class="st">スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込んで取り込みます</span><span class="au"></span><button type="button" class="sub cf">設定</button>';
       const bn = document.getElementById("xPasteDate");
       body.insertBefore(row, bn ? bn.nextSibling : body.firstChild);
       row.querySelector(".cf").onclick = editCfg;
@@ -4632,12 +4631,15 @@ render();
           const j = await fetchFeed(i.date);
           if (!j.total){ st.className = "st ng"; st.textContent = `${i.label}分はシフト表にまだありません（LH調整への転記がまだの可能性）`; return; }
           document.getElementById("pasteArea").value = j.text;
-          st.textContent = `${i.label}分を読み込みました：日勤 ${j.day}名／夜勤 ${j.night}名${j.in ? `／IN ${j.in}名` : ""}（${hm(j.at)}）。内容を確認して「取込実行」を押してください`;
+          st.textContent = `${i.label}分を読み込みました：日勤 ${j.day}名／夜勤 ${j.night}名${j.in ? `／IN ${j.in}名` : ""}（${hm(j.at)}）。取り込みます…`;
           try { previewPaste(); } catch (e) {}
+          // そのまま取込実行へ（確認のダイアログは出る。キャンセルすれば取り込まない）
+          await execPaste();
+          if (document.getElementById("pasteModal").classList.contains("open")) st.textContent = `${i.label}分を読み込みました（取り込みはキャンセルされました）。「取込実行」で取り込めます`;
         } catch (e){ st.className = "st ng"; st.textContent = e.message; }
       };
     }
-    const st = row.querySelector(".st"); st.className = "st"; st.textContent = "スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込みます";
+    const st = row.querySelector(".st"); st.className = "st"; st.textContent = "スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込んで取り込みます";
     paintRow();
   };
   window.openPasteModal = openPasteModal;
