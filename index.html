@@ -910,7 +910,8 @@ body.x-next .x-nbar{display:flex}
   X.clearNext = () => raw.remove(raw.rRef("next")).then(() => { X.date = ""; stamped = false; });
   const canUndo = () => !!(token() && X.prev && X.day && X.prev.promoteId === token() && X.day.promoteId === token());
   const AUTO_SEEN = "haichi_auto_seen";
-  const autoNote = () => { if (X.on || !X.day || !X.day.auto || X.day.date !== ymd(new Date())) return false; try { return localStorage.getItem(AUTO_SEEN) !== X.day.promoteId; } catch (e) { return true; } };
+  const autoNote = () => false;   // 自動反映のお知らせは出さない
+  const autoNote0 = () => { if (X.on || !X.day || !X.day.auto || X.day.date !== ymd(new Date())) return false; try { return localStorage.getItem(AUTO_SEEN) !== X.day.promoteId; } catch (e) { return true; } };
 
   // 2回押しのボタン
   function arm(btn, label, armLabel, fn){
@@ -960,13 +961,22 @@ body.x-next .x-nbar{display:flex}
       bar.innerHTML = `<span>翌日</span><b id="xNbTitle"></b><span>の配置を作成中です。当日の配置には反映されません（その日の朝5:00に自動で当日に反映）。</span><span class="x-imp" id="xNbImp"></span><span class="sp"></span>
         <button type="button" class="pro" id="xNbPro"></button>`;
       stats.parentNode.insertBefore(bar, stats);
-      arm(bar.querySelector("#xNbPro"), () => `${short(X.nextDate())}分を当日に反映`,
-        () => `もう一度押すと ${short(X.nextDate())}分が当日になります（${short(X.today())}分は置き換わります）`, X.promote);
+      const pb = bar.querySelector("#xNbPro");
+      pb.onclick = () => {
+        if (!confirm(`${X.label(X.nextDate())}分を当日に反映しますか？\n\n・${X.label(X.nextDate())}分の配置が当日（稼働中）の配置になります\n・いまの当日分（${X.label(X.today())}）は置き換わります\n・翌日分は空になります`)) return;
+        pb.disabled = true; pb.textContent = "処理中…";
+        Promise.resolve(X.promote()).catch(e => { alert("失敗しました: " + (e && e.message || e)); pb.disabled = false; pb.textContent = `${short(X.nextDate())}分を当日に反映`; });
+      };
       const ub = document.createElement("div"); ub.className = "x-ubar"; ub.id = "xUbar";
       ub.innerHTML = `<span id="xUbText"></span><span class="sp"></span><button type="button" id="xUbBtn">元に戻す</button><button type="button" id="xUbClose">閉じる</button>`;
       stats.parentNode.insertBefore(ub, stats);
       ub.querySelector("#xUbClose").onclick = () => { try { localStorage.setItem(AUTO_SEEN, X.day && X.day.promoteId || ""); } catch (e) {} paint(); };
-      arm(ub.querySelector("#xUbBtn"), () => "元に戻す", () => `もう一度押すと ${short(X.today())}分を翌日に戻し、${X.prev ? short(X.prev.date) : ""}分を当日に戻します`, X.undo);
+      const ubBtn = ub.querySelector("#xUbBtn");
+      ubBtn.onclick = () => {
+        if (!confirm(`反映を元に戻しますか？\n\n・${X.label(X.today())}分を翌日分に戻します\n・${X.prev ? X.label(X.prev.date) : "前"}分を当日に戻します`)) return;
+        ubBtn.disabled = true; ubBtn.textContent = "処理中…";
+        Promise.resolve(X.undo()).catch(e => { alert("失敗しました: " + (e && e.message || e)); ubBtn.disabled = false; ubBtn.textContent = "元に戻す"; });
+      };
     }
     paint();
   }
@@ -2542,7 +2552,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.10.01.4";
+const APP_VERSION="2026.10.01.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3636,7 +3646,12 @@ const X_keepEmpty = new Set();   // 工程ごと移動したあと、空の枠�
 const X_openArea = {};           // ＋空き工程で開いている区分（floor+place）
 const X_isShared = pl => pl === "ICQA" || pl === "other";
 const X_GL = {OUT:"OUTBOUND", IN:"INBOUND", ICQA:"ICQA", other:"other"};
-const X_NWC = {WAIT:"#94a3b8", ABSENT:"#e0796b", HOLIDAY:"#6b9bd1"};
+const X_NWC = {WAIT:"#94a3b8", ABSENT:"#e0796b", HOLIDAY:"#6b9bd1", ADMIN:"#b8860b"};
+// 右の列の枠（フロアに属さない場所）：待機・欠勤・休日 ＋ 管理者
+//  管理者Zone（ADMIN）は稼働扱い（待機ではない）。管理者はここが既定の場所。otherへはいつでもどのフロアへも動かせる
+const X_ADMIN_DEF = {loc:"ADMIN", label:"管理者"};
+const X_SIDE_DEFS = [...NONWORK_DEFS, X_ADMIN_DEF];
+const X_isSide = loc => NONWORK_LOCS.includes(loc) || loc === "ADMIN";
 let X_hot = null;
 function X_toast(t){
   let el = document.getElementById("xToast");
@@ -3647,9 +3662,11 @@ const X_esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, m => ({"&":"&am
 const X_base = loc => String(loc).split("|").slice(0, 2).join("|");
 const X_zone = loc => String(loc).split("|")[2] || "";
 const X_grp = loc => loc === "other" ? "other" : String(loc).split("|")[0];
-const X_label = loc => loc === "other" ? "other" : NONWORK_LOCS.includes(loc) ? (NONWORK_DEFS.find(d => d.loc === loc) || {}).label : String(loc).split("|")[1] || loc;
-const X_place = (f, loc) => NONWORK_LOCS.includes(loc) ? X_label(loc) : f + " " + X_label(loc) + (X_zone(loc) ? "・" + X_zone(loc) : "");
-const X_lh = a => a.length ? a.length + "名・" + fmtLHval(lhOf(a)) + "h" : "";
+const X_label = loc => loc === "other" ? "other" : X_isSide(loc) ? (X_SIDE_DEFS.find(d => d.loc === loc) || {}).label : String(loc).split("|")[1] || loc;
+const X_place = (f, loc) => X_isSide(loc) ? X_label(loc) : f + " " + X_label(loc) + (X_zone(loc) ? "・" + X_zone(loc) : "");
+// 人数（HC）・LH は管理者を除いて数える
+const X_wk = a => a.filter(p => !p.admin);
+const X_lh = a => { a = X_wk(a); return a.length ? a.length + "名・" + fmtLHval(lhOf(a)) + "h" : ""; };
 const X_key = p => uidEnc(uid(p));
 
 /* ---------- コマ ---------- */
@@ -3680,7 +3697,7 @@ function X_moreBtn(key, hid){
 function X_boxEl(cls, f, loc, mem, label){
   const b = X_el("div", cls + " x-dz" + (mem.length ? "" : (cls === "x-box" ? " empty" : " e")));
   b.dataset.floor = f; b.dataset.loc = loc; b.style.setProperty("--pc", secColor[loc] || "#94a3b8");
-  b.innerHTML = `<div class="x-bh${mem.length ? " x-grab" : ""}">${X_esc(label)}<span class="c">${mem.length || ""}</span></div>`;
+  b.innerHTML = `<div class="x-bh${mem.length ? " x-grab" : ""}">${X_esc(label)}<span class="c">${X_wk(mem).length || ""}</span></div>`;
   return b;
 }
 function X_usedSubs(f, pl, pool){
@@ -3703,7 +3720,7 @@ function X_sizeMain(main){
 function X_aside(main, kind){
   const as = X_el("aside", "x-aside");
   const all = DB.people.filter(p => p.shift === curShift);
-  NONWORK_DEFS.forEach(def => {
+  X_SIDE_DEFS.forEach(def => {
     const ps = all.filter(p => locOf(p) === def.loc).sort(sortPeople);
     const s = X_el("div", "x-side x-dz"); s.dataset.floor = ""; s.dataset.loc = def.loc; s.style.setProperty("--pc", X_NWC[def.loc] || "#94a3b8");
     s.innerHTML = `<h3>${def.label}<span>${ps.length}名</span></h3>`;
@@ -3728,12 +3745,12 @@ function X_flashHot(){
 function renderMulti(root){
   const main = X_frame(root);
   const allShift = DB.people.filter(p => p.shift === curShift);
-  const work = allShift.filter(p => !NONWORK_LOCS.includes(locOf(p)));
+  const work = allShift.filter(p => !X_isSide(locOf(p)));
   const floors = X_el("div", "x-floors"); floors.style.setProperty("--rows", DB.floors.length);
   DB.floors.forEach(f => {
     const mine = work.filter(p => floorOf(p) === f);
     const row = X_el("section", "x-fl"); row.dataset.floor = f;
-    row.innerHTML = `<div class="x-ftag" style="background:hsl(${floorHue(f)},55%,42%)">${f}<small>${mine.length}名</small></div>`;
+    row.innerHTML = `<div class="x-ftag" style="background:hsl(${floorHue(f)},55%,42%)">${f}<small>${X_wk(mine).length}名</small></div>`;
     ["OUT", "IN", "ICQA", "other"].forEach(g => {
       const inG = mine.filter(p => X_grp(locOf(p)) === g);
       const key = f + g;
@@ -3787,7 +3804,7 @@ function renderSingle(root){
   const main = X_frame(root);
   const f = curFloor;
   const allShift = DB.people.filter(p => p.shift === curShift);
-  const work = allShift.filter(p => !NONWORK_LOCS.includes(locOf(p)));
+  const work = allShift.filter(p => !X_isSide(locOf(p)));
   const mine = work.filter(p => floorOf(p) === f);
   const pool = g => X_isShared(g) ? work : mine;            // ICQA・otherは全フロア共通
   const inL = loc => pool(X_grp(loc)).filter(p => X_base(locOf(p)) === loc);
@@ -3809,7 +3826,7 @@ function renderSingle(root){
     groups.forEach(g => g.zones.forEach(z => {
       const loc = base + "|" + z, ps = mine.filter(p => locOf(p) === loc).sort(sortPeople);
       const zd = X_el("div", "x-pz x-dz" + (ps.length ? "" : " emp0")); zd.dataset.floor = f; zd.dataset.loc = loc; zd.style.setProperty("--zc", g.color);
-      zd.innerHTML = `<span class="zl">${z}${ps.length ? `<i>${ps.length}</i>` : ""}</span>`;
+      zd.innerHTML = `<span class="zl">${z}${X_wk(ps).length ? `<i>${X_wk(ps).length}</i>` : ""}</span>`;
       const zc = X_el("div", "x-chips"); ps.forEach(p => zc.appendChild(X_chip(p, "big"))); zd.appendChild(zc);
       list.appendChild(zd);
     }));
@@ -3899,7 +3916,7 @@ if (window.fbReady) X_watchLog(); else document.addEventListener("fbReady", X_wa
 function X_movePeople(ps, floor, loc){
   ps.forEach(p => {
     const k = X_key(p);
-    if (!NONWORK_LOCS.includes(loc) && (isNonWork(p) || floorOf(p) !== floor)) setFloorMove(k, floor);
+    if (!X_isSide(loc) && (X_isSide(locOf(p)) || floorOf(p) !== floor)) setFloorMove(k, floor);
     setLayout(k, loc);
   });
 }
@@ -3975,13 +3992,13 @@ function attachCardDrag(c, p){
       if (ok && hoverSec && hoverSec.dataset.loc){
         const loc = hoverSec.dataset.loc, tf = X_dropFloor(hoverSec);
         const ps = (dragUids || [X_key(p)]).map(k => DB.people.find(pp => X_key(pp) === k)).filter(Boolean);
-        const moving = ps.filter(pp => !(locOf(pp) === loc && (NONWORK_LOCS.includes(loc) || floorOf(pp) === tf)));
+        const moving = ps.filter(pp => !(locOf(pp) === loc && (X_isSide(loc) || floorOf(pp) === tf)));
         if (!moving.length) X_toast("同じ場所です");
         else {
           const from = X_place(floorOf(moving[0]), locOf(moving[0]));
           X_record(X_snap(moving), moving.length === 1 ? `${displayName(moving[0])}：${from} → ${X_place(tf, loc)}` : `${moving.length}名：→ ${X_place(tf, loc)}（${moving.map(displayName).join("・")}）`);
           X_movePeople(moving, tf, loc);
-          X_hot = NONWORK_LOCS.includes(loc) ? null : [tf, X_base(loc)];
+          X_hot = X_isSide(loc) ? null : [tf, X_base(loc)];
           clearSelection(); X_closeMini(); render();
           X_toast(`${moving.length === 1 ? displayName(moving[0]) : moving.length + "名"} を ${X_place(tf, loc)} へ移動しました`);
         }
@@ -4148,7 +4165,7 @@ function X_endGroup(ok){
   const loc = t.dataset.loc, tf = X_dropFloor(t);
   X_record(X_snap(g.ps), `${label} ${g.ps.length}名：${X_place(g.floor, g.loc)} → ${X_place(tf, loc)}（${names}）`, keepKey);
   X_movePeople(g.ps, tf, loc);
-  X_keepEmpty.add(keepKey); X_hot = NONWORK_LOCS.includes(loc) ? null : [tf, X_base(loc)];
+  X_keepEmpty.add(keepKey); X_hot = X_isSide(loc) ? null : [tf, X_base(loc)];
   render(); X_toast(`${label} の ${g.ps.length}名を ${X_place(tf, loc)} へ移動しました`);
 }
 document.addEventListener("pointerup", () => X_endGroup(true));
@@ -4158,24 +4175,24 @@ document.addEventListener("pointercancel", () => X_endGroup(false));
 function X_buildA3(dateStr){
   const all = DB.people.filter(p => p.shift === curShift);
   // otherに入っている管理者は印刷しない（ワーカーは印刷する）
-  const work = all.filter(p => !NONWORK_LOCS.includes(locOf(p)) && !(p.admin && locOf(p) === "other"));
+  const work = all.filter(p => !X_isSide(locOf(p)) && !(p.admin && locOf(p) === "other"));
   if (!all.length) return null;
   const e = X_esc;
   const nm = p => { const st = roleStyle(p.role), z = X_zone(locOf(p)); return `<span class="xa3-n${p.admin ? " adm" : ""}" style="--cc:${st.bg}">${z ? `<u>${e(z)}</u>` : ""}${e(displayName(p))}${p.fork ? "<i>F</i>" : ""}</span>`; };
   const d = dateStr ? new Date(dateStr + "T00:00:00") : window.X_NEXT ? new Date((X_NEXT.on ? X_NEXT.nextDate() : X_NEXT.today()) + "T00:00:00") : new Date(), ds = isNaN(d) ? "翌日分" : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
-  let h = `<div class="xa3-h"><b>配置図</b><span class="s">${e(curShift)}</span><span class="r">${ds}　稼働<em>${work.length}</em>名・LH<em>${fmtLHval(lhOf(work))}</em>　OUT<em>${work.filter(p => X_grp(locOf(p)) === "OUT").length}</em> IN<em>${work.filter(p => X_grp(locOf(p)) === "IN").length}</em> ICQA<em>${work.filter(p => X_grp(locOf(p)) === "ICQA").length}</em> other<em>${work.filter(p => locOf(p) === "other").length}</em></span></div>`;
+  let h = `<div class="xa3-h"><b>配置図</b><span class="s">${e(curShift)}</span><span class="r">${ds}　稼働<em>${X_wk(work).length}</em>名・LH<em>${fmtLHval(lhOf(X_wk(work)))}</em>　OUT<em>${X_wk(work).filter(p => X_grp(locOf(p)) === "OUT").length}</em> IN<em>${X_wk(work).filter(p => X_grp(locOf(p)) === "IN").length}</em> ICQA<em>${X_wk(work).filter(p => X_grp(locOf(p)) === "ICQA").length}</em> other<em>${X_wk(work).filter(p => locOf(p) === "other").length}</em></span></div>`;
   DB.floors.forEach(f => {
     const fp = work.filter(p => floorOf(p) === f);
     if (!fp.length) return;
-    h += `<div class="xa3-fl"><div class="xa3-ft" style="background:hsl(${floorHue(f)},55%,42%)">${e(f)}<small>${fp.length}名</small></div>`;
+    h += `<div class="xa3-fl"><div class="xa3-ft" style="background:hsl(${floorHue(f)},55%,42%)">${e(f)}<small>${X_wk(fp).length}名</small></div>`;
     ["OUT", "IN", "ICQA", "other"].forEach(g => {
       const inG = fp.filter(p => X_grp(locOf(p)) === g);
-      h += `<div class="xa3-a ${g}"><div class="xa3-ah">${X_GL[g]}<span>${inG.length ? inG.length + "名・" + fmtLHval(lhOf(inG)) : ""}</span></div>`;
+      h += `<div class="xa3-a ${g}"><div class="xa3-ah">${X_GL[g]}<span>${X_wk(inG).length ? X_wk(inG).length + "名・" + fmtLHval(lhOf(X_wk(inG))) : ""}</span></div>`;
       const locs = g === "other" ? ["other"] : (DB.master[g] || []).map(s => g + "|" + s);
       const used = locs.filter(l => inG.some(p => X_base(locOf(p)) === l));
       used.forEach(l => {
         const ps = inG.filter(p => X_base(locOf(p)) === l).sort((a, b) => X_zone(locOf(a)).localeCompare(X_zone(locOf(b))) || sortPeople(a, b));
-        h += `<div class="xa3-sec" style="--pc:${secColor[l] || "#64748b"}"><div class="xa3-sl">${e(X_label(l))}<span>${ps.length}名・${fmtLHval(lhOf(ps))}</span></div><div class="xa3-ns">${ps.map(nm).join("")}</div></div>`;
+        h += `<div class="xa3-sec" style="--pc:${secColor[l] || "#64748b"}"><div class="xa3-sl">${e(X_label(l))}<span>${X_wk(ps).length ? X_wk(ps).length + "名・" + fmtLHval(lhOf(X_wk(ps))) : ""}</span></div><div class="xa3-ns">${ps.map(nm).join("")}</div></div>`;
       });
       if (!used.length) h += `<div class="xa3-none">―</div>`;
       h += `</div>`;
@@ -4347,10 +4364,13 @@ setTimeout(() => {
   openPasteModal();
   if (v !== "\u0000") document.getElementById("pasteArea").value = v;
 }, 600);
-// 翌日分：まだ配置していない管理者は、すべて待機に置く（翌日分が空になった＝リセット直後も待機）
+// 管理者：まだ配置していない管理者は「管理者」Zoneに置く（当日・翌日とも。翌日分をリセットした直後も）
+//  管理者Zone（ADMIN）に置いた人はそこに出す。otherや工程へ動かせば、そこが配置になる
 const X_locOf0 = locOf;
 locOf = function(p){
-  if (p && p.admin && !window.X_refCalc && window.X_NEXT && (X_NEXT.on || window.X_asNext) && layout[X_key(p)] === undefined) return "WAIT";
+  const v = p ? layout[X_key(p)] : undefined;
+  if (v === "ADMIN") return "ADMIN";
+  if (p && p.admin && v === undefined) return "ADMIN";
   return X_locOf0(p);
 };
 window.locOf = locOf;
@@ -4405,7 +4425,7 @@ execPaste = async function(){
   const gone = Math.max(0, ref.count - kept.size);
   const C0 = window.confirm, A0 = window.alert; let ok = false;
   const msg = `【${i.label}分として取り込みます】${i.next ? "" : "\n※稼働中の当日の配置が変わります"}\n\n` +
-    `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者も当日と同じ配置）`;
+    `${parsed.people.length}名をこの日の名簿にします。\n・前日と同じ配置：${same}名\n・待機へ：${wait}名\n・名簿から外れる：${gone}名\n（管理者は記録で一番多い配置。記録がなければ当日と同じ配置）`;
   // 取り込む前の、この画面（当日または翌日分）の配置。名簿にいた人は、取り込み直してもこの配置のまま（待機・欠勤なども含めて）
   const pre = new Map(), preByName = new Map();
   DB.people.filter(p => !p.admin).forEach(p => {
@@ -4440,10 +4460,12 @@ execPaste = async function(){
     if (r && !NONWORK_LOCS.includes(r.loc)) moves.push({k, p, r});
   });
   const newN = pres.filter(v => !v).length;
-  // 管理者も当日と同じ場所（待機・休日なども含めてそのまま）。翌日分ですでに動かした管理者はそのまま
-  if (i.next) DB.people.filter(p => p.admin).forEach(p => {
-    const k = X_key(p), r = ref.adm.get(k); if (!r) return;
-    if (layout[k] === undefined){ setLayout(k, r.loc); if (r.floor !== floorOf(p)) setFloorMove(k, r.floor); }
+  // 管理者：この画面でまだ配置していない管理者だけ決める（すでに置いた管理者はそのまま）
+  //  統計（直近2週間の同じ曜日区分で一番多い場所）→ 翌日分なら当日の配置 → 管理者Zone
+  DB.people.filter(p => p.admin).forEach(p => {
+    const k = X_key(p); if (layout[k] !== undefined) return;
+    const r = (stat && stat.get(X_histKey(p))) || (i.next ? ref.adm.get(k) : null); if (!r || !r.loc) return;
+    setLayout(k, r.loc); if (r.floor && r.floor !== floorOf(p)) setFloorMove(k, r.floor);
   });
   // 取込の記録（翌日分）：どのPCからも「取込済み」が見えるように
   if (i.next && window.X_NEXT && X_NEXT.raw) X_NEXT.raw.set(X_NEXT.raw.rRef("next/meta/imported"), {at:Date.now(), count:parsed.people.length, day:parsed.people.filter(p => p.shift === "日勤").length, night:parsed.people.filter(p => p.shift === "夜勤").length});
@@ -4714,7 +4736,7 @@ render();
 
 /* ---------- 配置の記録と統計（取り込みのときの配置に使う） ----------
    ・毎日、日勤は9:00、夜勤は21:00の時点の当日の配置を history/<日付>/<day|night> に記録する（開いているPCのどれか1台）
-     記録するのは作業している場所だけ（待機・欠勤・休日は記録しない）。30日より古い記録は消す
+     記録するのは作業している場所だけ（待機・欠勤・休日は記録しない）。管理者も記録する（管理者Zoneも場所として記録）。30日より古い記録は消す
    ・取り込みのとき：取り込む日付が平日なら直近2週間の平日、土日なら直近2週間の土日の記録から、
      その人が一番多くいた場所（同じ回数なら新しい日）に置く。記録がない人は前日の配置、それもなければ待機 */
 function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || "").replace(/\s/g, "")).replace(/[.#$\[\]\/]/g, "_"); }
@@ -4729,8 +4751,9 @@ function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || ""
 
   // 当日の配置（翌日の画面を開いていても、当日分を読む）
   async function todayPlaces(shift){
-    const ro = await g("roster"), cu = await g("custom");
-    const people = [...(Array.isArray(ro) ? ro : Object.values(ro || {})).filter(Boolean), ...Object.values(cu || {}).filter(Boolean)].filter(p => p && !p.admin && p.shift === shift);
+    const ro = await g("roster"), cu = await g("custom"), ad = await g("admins");
+    const admins = (Array.isArray(ad) ? ad : Object.values(ad || {})).filter(Boolean).map(a => Object.assign({}, a, {admin:true}));
+    const people = [...(Array.isArray(ro) ? ro : Object.values(ro || {})).filter(Boolean).filter(p => !p.admin), ...Object.values(cu || {}).filter(Boolean).filter(p => !p.admin), ...admins].filter(p => p && p.shift === shift);
     const lay = await g("layout") || {}, fm = await g("floorMove") || {};
     const L0 = layout, F0 = floorMove, out = {};
     layout = lay; floorMove = fm; window.X_refCalc = true;
@@ -4801,6 +4824,30 @@ function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || ""
   };
   setTimeout(snapCheck, 8000);
   setInterval(snapCheck, 60 * 1000);
+})();
+
+/* ---------- 管理者Zoneへの移し替え（1回だけ） ----------
+   これまで管理者は other に置かれていた（取り込みのときに other として記録されたものも含む）。
+   当日分・翌日分の、other にいる管理者を管理者Zoneへ移す。どこかのPCで1回実行したら、以後はしない */
+(function(){
+  const raw = () => window.X_NEXT && X_NEXT.raw;
+  async function run(){
+    for (let n = 0; n < 60 && !raw(); n++) await new Promise(r => setTimeout(r, 500));
+    if (!raw()) return;
+    const R = raw(), g = async k => (await R.get(R.rRef(k))).val();
+    if (await g("migr/adminZone")) return;
+    await R.set(R.rRef("migr/adminZone"), {at:Date.now(), running:true});
+    const ad = await g("admins"); const admins = Array.isArray(ad) ? ad : Object.values(ad || {});
+    const keys = new Set(admins.filter(Boolean).map(a => X_key(Object.assign({}, a, {admin:true}))));
+    let n = 0;
+    for (const base of ["", "next/"]){
+      const lay = await g(base + "layout") || {};
+      for (const k of Object.keys(lay)) if (keys.has(k) && lay[k] === "other"){ await R.set(R.rRef(base + "layout/" + k), "ADMIN"); n++; }
+    }
+    await R.set(R.rRef("migr/adminZone"), {at:Date.now(), moved:n});
+    if (n) setTimeout(() => { try { render(); } catch (e) {} }, 800);
+  }
+  setTimeout(run, 4000);
 })();
 </script>
 
