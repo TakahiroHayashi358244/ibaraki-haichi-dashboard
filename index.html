@@ -2552,7 +2552,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.10.02.2";
+const APP_VERSION="2026.10.21.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3628,6 +3628,10 @@ header.hc3 .x-hmenu{display:inline-flex}
   .x-ftag{flex-direction:row;gap:8px;padding:6px}
   .x-area{overflow:visible}
 }
+.x-pbk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 0;padding-top:10px;border-top:1px dashed #d1d5db;font-size:12px;color:#6b7280}
+.x-pbk button{background:none;border:1px solid #d1d5db;border-radius:7px;padding:4px 10px;font-size:12px;color:#4b5563;cursor:pointer}
+.x-pbk.on{color:#b91c1c;font-weight:700}
+.x-pbk.on button{color:#1f2937;border-color:#9ca3af}
 .x-sfeed{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:9px;font-size:12.5px;font-weight:700;color:#14532d}
 .x-sfeed button{font:inherit;font-size:13px;font-weight:800;border:1px solid #16a34a;background:#16a34a;color:#fff;border-radius:7px;padding:6px 14px;cursor:pointer}
 .x-sfeed button.sub{background:#fff;color:#166534;font-size:12px;font-weight:700;padding:4px 10px}
@@ -4669,14 +4673,51 @@ render();
           try { previewPaste(); } catch (e) {}
           // そのまま取込実行へ（確認のダイアログは出る。キャンセルすれば取り込まない）
           await execPaste();
-          if (document.getElementById("pasteModal").classList.contains("open")) st.textContent = `${i.label}分を読み込みました（取り込みはキャンセルされました）。「取込実行」で取り込めます`;
+          if (document.getElementById("pasteModal").classList.contains("open")) st.textContent = `${i.label}分を読み込みました（取り込みはキャンセルされました）。もう一度「シフト表から取り込む」を押すと取り込めます`;
         } catch (e){ st.className = "st ng"; st.textContent = e.message; }
       };
     }
     const st = row.querySelector(".st"); st.className = "st"; st.textContent = "スプレッドシートの「指定日出勤予定一覧」と同じ内容を、この日付分で読み込んで取り込みます";
     paintRow();
+    X_pasteBackup(false);
   };
   window.openPasteModal = openPasteModal;
+  // 取込はシフト表からだけにする（コピペは、シフト表が使えないときの予備として奥にしまう）
+  //  一部の名簿だけを貼ると、その名簿で全体が置き換わり、ほかの人が外れてしまうため
+  function X_pasteBackup(on){
+    const m = document.getElementById("pasteModal"); if (!m) return;
+    const body = m.querySelector(".modal-body"); if (!body) return;
+    const h2 = m.querySelector(".modal-head h2"); if (h2) h2.textContent = on ? "コピペで取込（予備）" : "シフト表から取込";
+    const parts = [body.querySelector(".paste-help"), document.getElementById("pasteArea"), document.getElementById("pastePreview")];
+    parts.forEach(el => { if (el) el.style.display = on ? "" : "none"; });
+    const acts = body.querySelector(".paste-actions");
+    if (acts) [...acts.querySelectorAll("button")].forEach(b => { if (!/キャンセル/.test(b.textContent)) b.style.display = on ? "" : "none"; });
+    let bk = document.getElementById("xPasteBackup");
+    if (!bk){
+      bk = X_el("div", "x-pbk"); bk.id = "xPasteBackup";
+      bk.innerHTML = '<button type="button"></button><span></span>';
+      body.insertBefore(bk, acts || null);
+    }
+    const btn = bk.querySelector("button"), tx = bk.querySelector("span");
+    btn.textContent = on ? "シフト表からの取込に戻す" : "予備：コピペで取り込む";
+    tx.textContent = on ? "貼り付けた名簿でこの日の名簿全体が置き換わります。日勤・夜勤の全員分を貼り付けてください。" : "シフト表が読み込めないときだけ使います";
+    bk.classList.toggle("on", !!on);
+    btn.onclick = () => {
+      if (!on && !confirm("コピペ取込は、シフト表が読み込めないときの予備です。\n貼り付けた名簿でこの日の名簿全体が置き換わります（貼っていない人は名簿から外れます）。\n日勤・夜勤の全員分を貼り付けてください。\n\nコピペで取り込みますか？")) return;
+      if (!on){ const a = document.getElementById("pasteArea"); if (a) a.value = ""; }
+      X_pasteBackup(!on);
+    };
+  }
+  // ヘッダーのボタン名も「取込」に（「その他」メニューの中の名前も合わせる）
+  setTimeout(() => {
+    const b = document.querySelector("header .btn.paste"); if (!b) return;
+    const L = "📋 名簿取込";
+    b.title = "シフト表から名簿を取り込む";
+    if (b.dataset.long) b.dataset.long = L;
+    if (/コピペ取込/.test(b.textContent)) b.textContent = L;
+    document.querySelectorAll(".x-hlist button").forEach(it => { if (/コピペ取込/.test(it.textContent)) it.textContent = "名簿取込（シフト表から）"; });
+    if (window.X_fitHeader) X_fitHeader();
+  }, 0);
 
   // 自動取込：設定時刻を過ぎたら、明日の分がまだ取り込まれていなければ取り込む
   let busy = false;
