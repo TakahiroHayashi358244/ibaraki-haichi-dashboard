@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.02.6",
+  "version": "2026.11.02.7",
   "date": "2026-11-02",
-  "notes": "INのForkをStowとして計上（カードのUPH・見込みTPとも）。FCSTを起点にした見込みを追加。フロア画面のOUTBOUND・INBOUND見出しに今のフロアのUPH・TP（INはReceive・Stow別）。サマリのフロア別合計にOUT・INのUPH・TP列、新しい表「FCSTに対する見込み」（工程ごとのTP・FCSTとの差・必要LH・LHの過不足、OUTはPick・Packの少ない方で出荷できる数と全LHで見た全体UPH）、フロアごとの工程表にUPH・TP列。"
+  "notes": "見込みTP・UPHの並びを Pick→Pack→Receive→Stow に。INのForkをStowとして計上（カードのUPH・見込みTPとも）。FCSTを起点にした見込みを追加。フロア画面のOUTBOUND・INBOUND見出しに今のフロアのUPH・TP（INはReceive・Stow別）。サマリのフロア別合計にOUT・INのUPH・TP列、新しい表「FCSTに対する見込み」（工程ごとのTP・FCSTとの差・必要LH・LHの過不足、OUTはPick・Packの少ない方で出荷できる数と全LHで見た全体UPH）、フロアごとの工程表にUPH・TP列。"
 }

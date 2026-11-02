@@ -1436,7 +1436,7 @@ function applyFloorTheme(){
 // ===== 個人の過去30日UPH（間接打刻管理 indirect-relay-hfo1 の作業変化モニターのデータ）=====
 //  名前で突き合わせる（空白・全角半角の違いは無視）。同じ名前が複数いる人は使わない
 const UPH_API="https://indirect-relay-hfo1.takahiro884.workers.dev/api/fr/uphall?days=30&k=1540850d9c168e02e13c9c10c06d8bed";
-const UPH_CAT_COL={Stow:"#16a34a",Pick:"#0891b2",Pack:"#db2777",Receive:"#ca8a04"};
+const UPH_CAT_COL={Pick:"#0891b2",Pack:"#db2777",Receive:"#ca8a04",Stow:"#16a34a"};   // 並び順＝表示順（Stow は最後）
 let uphByName=new Map(),uphAt=0,uphPeople=[],uphFallback={};
 // 異体字（髙→高 など）もそろえる
 const UPH_ITAIJI={"髙":"高","﨑":"崎","嵜":"崎","德":"徳","濵":"浜","濱":"浜","邊":"辺","邉":"辺","齋":"斎","齊":"斎","槇":"槙","冨":"富","祐":"祐","櫻":"桜","澤":"沢","國":"国","廣":"広","眞":"真","實":"実","惠":"恵","瀨":"瀬","曻":"昇"};
@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.02.6";
+const APP_VERSION="2026.11.02.7";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4191,7 +4191,7 @@ let X_pop = null;
 function X_showPop(p, el, auto){
   X_hidePop();
   const pop = X_el("div", "x-pop");
-  const uc = uphCatsOf(p), ucs = uc ? ["Stow", "Pick", "Pack", "Receive"].filter(k => uc[k]) : [];
+  const uc = uphCatsOf(p), ucs = uc ? Object.keys(UPH_CAT_COL).filter(k => uc[k]) : [];
   pop.innerHTML = `<b>${X_esc(displayName(p))}</b>${X_esc(p.role)}${p.admin ? "・管理者" : ""}<br>${X_esc(X_place(floorOf(p), locOf(p)))}・LH ${fmtLHval(p.lh || 0)}<br>${p.shift}${p.fork ? "・フォーク" : ""}`
     + (ucs.length ? `<br><span style="font-size:.85em;opacity:.75">過去30日のUPH平均</span><br>${ucs.map(k => `<span style="display:inline-block;margin:2px 4px 0 0;padding:0 5px;border:1.5px solid ${UPH_CAT_COL[k]};border-radius:4px;color:#fff">${k} <b style="display:inline">${uc[k].uph}</b></span>`).join("")}` : "");
   document.body.appendChild(pop); X_pop = pop;
