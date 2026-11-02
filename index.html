@@ -1437,15 +1437,18 @@ function applyFloorTheme(){
 //  名前で突き合わせる（空白・全角半角の違いは無視）。同じ名前が複数いる人は使わない
 const UPH_API="https://indirect-relay-hfo1.takahiro884.workers.dev/api/fr/uphall?days=30&k=1540850d9c168e02e13c9c10c06d8bed";
 const UPH_CAT_COL={Stow:"#16a34a",Pick:"#0891b2",Pack:"#db2777",Receive:"#ca8a04"};
-let uphByName=new Map(),uphAt=0;
-const uphNorm=s=>String(s||"").normalize("NFKC").replace(/[\s　・.,，]/g,"").toLowerCase();
+let uphByName=new Map(),uphAt=0,uphPeople=[];
+// 異体字（髙→高 など）もそろえる
+const UPH_ITAIJI={"髙":"高","﨑":"崎","嵜":"崎","德":"徳","濵":"浜","濱":"浜","邊":"辺","邉":"辺","齋":"斎","齊":"斎","槇":"槙","冨":"富","祐":"祐","櫻":"桜","澤":"沢","國":"国","廣":"広","眞":"真","實":"実","惠":"恵","瀨":"瀬","曻":"昇"};
+const uphNorm=s=>String(s||"").normalize("NFKC").replace(/[髙﨑嵜德濵濱邊邉齋齊槇冨櫻澤國廣眞實惠瀨曻]/g,c=>UPH_ITAIJI[c]||c).replace(/[\s　・.,，]/g,"").toLowerCase();
+const uphCo=s=>String(s||"").normalize("NFKC").replace(/\s/g,"").toLowerCase();
 function loadUph(){
   fetch(UPH_API,{cache:"no-store"}).then(r=>r.json()).then(j=>{
     if(!j||!j.ok)return;
     const m=new Map(),dup=new Set();
     for(const p of j.people||[])for(const n of [p.name,p.alias]){const k=uphNorm(n);if(!k)continue;if(m.has(k)&&m.get(k)!==p.cats)dup.add(k);m.set(k,p.cats)}
     dup.forEach(k=>m.delete(k));
-    uphByName=m;uphAt=Date.now();render();
+    uphByName=m;uphPeople=j.people||[];uphMatchCache=new Map();uphAt=Date.now();render();
     const sm=document.getElementById("summaryModal");if(sm&&sm.classList.contains("open"))openSummary();
   }).catch(e=>console.warn("UPH読込",e));
 }
@@ -1453,7 +1456,23 @@ setTimeout(loadUph,1500);setInterval(loadUph,30*60000);
 // 工程（セクション名）→ FCLM の作業分類
 function secCat(sec){const s=String(sec||"");return /stow/i.test(s)?"Stow":/pick/i.test(s)?"Pick":/pack/i.test(s)?"Pack":/receiv|recive|rcv|decant|prep/i.test(s)?"Receive":null}
 function locCat(p){const l=locOf(p);if(!l||l.indexOf("|")<0)return null;return secCat(l.split("|")[1])}
-function uphOfP(p,cat){if(!cat)return null;const c=uphByName.get(uphNorm(displayName(p)))||uphByName.get(uphNorm(p.name));return c&&c[cat]?c[cat].uph:null}
+// 名前が完全に一致しないときは、同じ会社の人で「・」区切りの最後（外国籍の方の呼び名）が一致する人を1人だけ探す
+let uphMatchCache=new Map();
+function uphCatsOf(p){
+  const dn=displayName(p),key=dn+"|"+p.name+"|"+p.role;
+  if(uphMatchCache.has(key))return uphMatchCache.get(key);
+  let c=uphByName.get(uphNorm(dn))||uphByName.get(uphNorm(p.name))||null;
+  if(!c){
+    const co=uphCo(p.role),segs=[dn,p.name].map(n=>String(n||"").normalize("NFKC").split(/[・･\s　]+/).filter(Boolean)).filter(a=>a.length>1).map(a=>uphNorm(a[a.length-1]));
+    if(segs.length&&co){
+      const hits=uphPeople.filter(q=>{const qc=uphCo(q.company);return qc&&(qc.startsWith(co)||co.startsWith(qc))&&segs.includes(uphNorm(q.name))});
+      if(hits.length===1)c=hits[0].cats;
+    }
+  }
+  uphMatchCache.set(key,c);
+  return c;
+}
+function uphOfP(p,cat){if(!cat)return null;const c=uphCatsOf(p);return c&&c[cat]?c[cat].uph:null}
 
 function render(){
   buildColors();renderFloorTabs();
@@ -2619,7 +2638,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.02.1";
+const APP_VERSION="2026.11.02.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3509,6 +3528,7 @@ render();
 .x-c .sf.n{background:#ede9fe;color:#6d28d9}
 .x-c .fl2{flex:none;align-self:center;margin-left:4px;font-size:9.5px;font-weight:800;font-family:var(--x-mono);border:1px solid var(--x-line);border-radius:3px;padding:0 3px;line-height:14px;color:var(--x-sub)}
 .x-c.adm{box-shadow:0 0 0 2px #fbbf24}
+.x-c .xu{flex:none;margin-left:4px;font-size:10px;font-weight:800;border:1.5px solid currentColor;border-radius:4px;padding:0 3px;line-height:13px;background:#fff}
 .x-c.dragging{opacity:.3}
 .x-c.selected{outline:2px solid var(--x-acc);outline-offset:1px}
 /* 全フロア：◯バッジ（名前の頭文字・会社色） */
@@ -3749,6 +3769,8 @@ function X_chip(p, kind, withFloor){
   c.dataset.uidkey = X_key(p);
   if (kind === "bd") c.innerHTML = `<span class="co" style="background:${st.bg};color:${st.fg}">${X_esc(ini)}</span>${p.fork ? '<span class="fk">F</span>' : ""}${p.shift === "夜勤" ? '<span class="nt">夜</span>' : ""}`;
   else c.innerHTML = `<span class="co" style="background:${st.bg};color:${st.fg}">${X_esc(co)}</span><span class="nm">${X_esc(dn)}</span>${withFloor ? `<span class="fl2">${X_esc(floorOf(p))}</span>` : ""}${p.fork ? '<span class="f">F</span>' : ""}<span class="sf${p.shift === "夜勤" ? " n" : ""}">${p.shift === "夜勤" ? "夜" : "日"}</span>`;
+  // 配置先の工程（Stow・Pick・Pack・Receive）の過去30日UPH（間接打刻管理）
+  if (kind !== "bd") { const cat = locCat(p), u = uphOfP(p, cat); if (u != null) { const e = document.createElement("span"); e.className = "xu"; e.style.color = UPH_CAT_COL[cat]; e.textContent = u; e.title = `過去30日の${cat} UPH 平均`; c.appendChild(e); } }
   if (searchQ && !dn.includes(searchQ)) c.style.opacity = ".22";
   if (selectedUids.has(c.dataset.uidkey)) c.classList.add("selected");
   attachCardDrag(c, p);
