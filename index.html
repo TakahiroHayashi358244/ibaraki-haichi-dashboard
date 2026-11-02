@@ -1456,8 +1456,9 @@ function loadUph(){
 }
 setTimeout(loadUph,1500);setInterval(loadUph,30*60000);
 // 工程（セクション名）→ FCLM の作業分類
-function secCat(sec){const s=String(sec||"");return /stow/i.test(s)?"Stow":/pick/i.test(s)?"Pick":/pack/i.test(s)?"Pack":/receiv|recive|rcv|decant|prep/i.test(s)?"Receive":null}
-function locCat(p){const l=locOf(p);if(!l||l.indexOf("|")<0)return null;return secCat(l.split("|")[1])}
+//  pl（OUT/IN）を渡すと区分ごとの読み替えもする：INの Fork はフォークでの Stow なので Stow として数える
+function secCat(sec,pl){const s=String(sec||"");if(pl==="ICQA")return null;if(pl==="IN"&&/fork/i.test(s))return "Stow";return /stow/i.test(s)?"Stow":/pick/i.test(s)?"Pick":/pack/i.test(s)?"Pack":/receiv|recive|rcv|decant|prep/i.test(s)?"Receive":null}
+function locCat(p){const l=locOf(p);if(!l||l.indexOf("|")<0)return null;const a=l.split("|");return secCat(a[1],a[0])}
 // 名前が完全に一致しないときは、同じ会社の人で「・」区切りの最後（外国籍の方の呼び名）が一致する人を1人だけ探す
 let uphMatchCache=new Map();
 function uphCatsOf(p){
@@ -2207,7 +2208,7 @@ function openSummary(){
         const cellNames=[names,adminNames].filter(Boolean).join(adminNames&&names?'<span class="nm-sep">/</span>':'')||'<span class="z">—</span>';
         const hcCell=mem.length?mem.length+(memAdm.length?`<span class="adm-add">+${memAdm.length}</span>`:''):(memAdm.length?`<span class="adm-only">${memAdm.length}</span>`:0);
         // ダイレクト工程（ICQA以外の Stow・Pick・Pack・Receive）は UPH・TP
-        const sc=pl!=="ICQA"?secCat(s):null,cp=sc&&mem.length&&uphByName.size?capOf(mem,sc):null;
+        const sc=secCat(s,pl),cp=sc&&mem.length&&uphByName.size?capOf(mem,sc):null;
         const upTd=cp?`<td title="${X_esc(capTip(cp,sc))}">${cp.uph!=null?Math.round(cp.uph):"—"}</td><td title="${X_esc(capTip(cp,sc))}"><b>${capN(cp.tp)}</b></td>`:`<td class="z">${sc&&mem.length?"—":""}</td><td class="z"></td>`;
         rows+=`<tr><td class="secname">${s}</td><td class="${mem.length||memAdm.length?'has':'z'}">${hcCell}</td><td class="${mem.length?'lh':'z'}">${mem.length?fmtLH(lhT):0}</td>${upTd}<td class="nmcell">${cellNames}</td></tr>`;
       });
@@ -2697,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.02.5";
+const APP_VERSION="2026.11.02.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3858,7 +3859,7 @@ function X_boxEl(cls, f, loc, mem, label){
   b.dataset.floor = f; b.dataset.loc = loc; b.style.setProperty("--pc", secColor[loc] || "#94a3b8");
   b.innerHTML = `<div class="x-bh${mem.length ? " x-grab" : ""}">${X_esc(label)}<span class="c">${X_wk(mem).length || ""}</span></div>`;
   // 工程（Stow・Pick・Pack・Receive）の枠は、右上に LH・UPH・TP（全フロア表示は TP だけ）
-  const cat = loc.indexOf("|") > 0 && X_grp(loc) !== "ICQA" ? secCat(loc.split("|")[1]) : null;
+  const cat = loc.indexOf("|") > 0 ? secCat(loc.split("|")[1], X_grp(loc)) : null;
   if (cat && X_wk(mem).length && uphFallback[cat] != null){
     const c = capOf(mem, cat), small = cls === "x-box";
     const e = X_el("span", "x-cap", small ? `TP <b>${capN(c.tp)}</b>` : `LH ${fmtLHval(c.lh)}・UPH <b>${c.uph != null ? Math.round(c.uph) : "—"}</b>・TP <b>${capN(c.tp)}</b>`);
