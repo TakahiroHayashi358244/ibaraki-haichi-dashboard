@@ -1437,7 +1437,7 @@ function applyFloorTheme(){
 //  名前で突き合わせる（空白・全角半角の違いは無視）。同じ名前が複数いる人は使わない
 const UPH_API="https://indirect-relay-hfo1.takahiro884.workers.dev/api/fr/uphall?days=30&k=1540850d9c168e02e13c9c10c06d8bed";
 const UPH_CAT_COL={Stow:"#16a34a",Pick:"#0891b2",Pack:"#db2777",Receive:"#ca8a04"};
-let uphByName=new Map(),uphAt=0,uphPeople=[];
+let uphByName=new Map(),uphAt=0,uphPeople=[],uphFallback={};
 // 異体字（髙→高 など）もそろえる
 const UPH_ITAIJI={"髙":"高","﨑":"崎","嵜":"崎","德":"徳","濵":"浜","濱":"浜","邊":"辺","邉":"辺","齋":"斎","齊":"斎","槇":"槙","冨":"富","祐":"祐","櫻":"桜","澤":"沢","國":"国","廣":"広","眞":"真","實":"実","惠":"恵","瀨":"瀬","曻":"昇"};
 const uphNorm=s=>String(s||"").normalize("NFKC").replace(/[髙﨑嵜德濵濱邊邉齋齊槇冨櫻澤國廣眞實惠瀨曻]/g,c=>UPH_ITAIJI[c]||c).replace(/[\s　・.,，]/g,"").toLowerCase();
@@ -1448,7 +1448,9 @@ function loadUph(){
     const m=new Map(),dup=new Set();
     for(const p of j.people||[])for(const n of [p.name,p.alias]){const k=uphNorm(n);if(!k)continue;if(m.has(k)&&m.get(k)!==p.cats)dup.add(k);m.set(k,p.cats)}
     dup.forEach(k=>m.delete(k));
-    uphByName=m;uphPeople=j.people||[];uphMatchCache=new Map();uphAt=Date.now();render();
+    uphByName=m;uphPeople=j.people||[];uphMatchCache=new Map();
+    // 実績がない人の見込みに使う、工程ごとの全体平均（時間で重み付け）
+    uphFallback={};for(const k of Object.keys(UPH_CAT_COL)){let u=0,h=0;for(const q of uphPeople){const c=q.cats&&q.cats[k];if(c&&c.uph!=null){u+=c.uph*c.hrs;h+=c.hrs}}uphFallback[k]=h>0?u/h:null}uphAt=Date.now();render();
     const sm=document.getElementById("summaryModal");if(sm&&sm.classList.contains("open"))openSummary();
   }).catch(e=>console.warn("UPH読込",e));
 }
@@ -1473,6 +1475,17 @@ function uphCatsOf(p){
   return c;
 }
 function uphOfP(p,cat){if(!cat)return null;const c=uphCatsOf(p);return c&&c[cat]?c[cat].uph:null}
+// 見込み：ps（その工程に配置した人）について LH・平均UPH・時間あたり・TP（＝Σ UPH×LH）
+//  実績がない人は工程の全体平均UPHで見込む（est に人数）
+function capOf(ps,cat){
+  const o={n:0,lh:0,perH:0,tp:0,uph:null,est:0,none:0};
+  if(!cat)return o;
+  for(const p of ps){if(p.admin)continue;o.n++;const lh=p.lh||0;o.lh+=lh;let u=uphOfP(p,cat);if(u==null){u=uphFallback[cat];if(u!=null)o.est++;else{o.none++;continue}}o.perH+=u;o.tp+=u*lh}
+  o.uph=o.lh>0&&o.tp>0?o.tp/o.lh:(o.n-o.none>0?o.perH/(o.n-o.none):null);
+  return o;
+}
+const capN=n=>Math.round(n).toLocaleString("ja-JP");
+const capTip=(c,cat)=>`${cat}の見込み（過去30日UPH）\nLH ${fmtLHval(c.lh)}　平均UPH ${c.uph!=null?Math.round(c.uph):"—"}\n時間あたり ${capN(c.perH)}　TP ${capN(c.tp)}`+(c.est?`\n※実績がない${c.est}名は${cat}の全体平均で計算`:"");
 
 function render(){
   buildColors();renderFloorTabs();
@@ -2015,7 +2028,15 @@ function renderStats(v){
     `<span><b>${curShift}・${curFloor}</b> 実稼働<b>${v.length}</b>名${adminTag}${adminOffTag}</span>`+
     `<span>稼働 <b>${v.length-wait}</b>名</span>`+
     `<span>OUT <b>${bp('OUT')}</b> / IN <b>${bp('IN')}</b> / ICQA <b>${bp('ICQA')}</b></span>`+
-    `<span>フォーク <b>${fork}</b>名</span><span>待機/欠勤(全体) <b>${allWait}</b>名</span>`;
+    `<span>フォーク <b>${fork}</b>名</span><span>待機/欠勤(全体) <b>${allWait}</b>名</span>`+tpAllHtml();
+}
+// 見込みTP（全フロア・このシフト）を工程ごとに。当日・翌日どちらの表示でも、表示中の名簿で計算する
+function tpAllHtml(){
+  if(!uphByName.size)return "";
+  const act=DB.people.filter(p=>p.shift===curShift&&!p.admin&&!isNonWork(p));
+  const parts=Object.keys(UPH_CAT_COL).map(k=>{const ps=act.filter(p=>locCat(p)===k);if(!ps.length)return "";const c=capOf(ps,k);
+    return `<span title="${X_esc(capTip(c,k))}"><i style="background:${UPH_CAT_COL[k]}"></i>${k} <b>${capN(c.tp)}</b> <small>(${capN(c.perH)}/h)</small></span>`}).filter(Boolean);
+  return parts.length?`<span class="tpall">見込みTP（全フロア）${parts.join("")}</span>`:"";
 }
 function renderLegend(){
   const L=document.getElementById("legend");L.innerHTML="";
@@ -2453,25 +2474,25 @@ function refreshTP(){
 const CAP_ROWS=[["Receive","IN"],["Stow","IN"],["Pick","OUT"],["Pack","OUT"]];
 function capacityHtml(act){
   if(!uphByName.size)return `<div class="sumblock"><h3>工程ごとの見込み処理数</h3><p class="sumnote">個人のUPH（間接打刻管理）を読み込めていません。</p></div>`;
-  const fmt=n=>Math.round(n).toLocaleString("ja-JP");
+  const fl=DB.floors.filter(f=>act.some(p=>floorOf(p)===f&&locCat(p)));
   let rows="";
   for(const [cat,io] of CAP_ROWS){
     const mem=act.filter(p=>locCat(p)===cat);
     if(!mem.length)continue;
-    const known=mem.map(p=>[p,uphOfP(p,cat)]).filter(x=>x[1]!=null);
-    const avg=known.length?known.reduce((s,x)=>s+x[1],0)/known.length:null;
-    let cap=0,lh=0;
-    for(const p of mem){const u=uphOfP(p,cat)??avg;lh+=p.lh||0;if(u!=null)cap+=(p.lh||0)*u}
-    rows+=`<tr data-cap="${io}" data-v="${Math.round(cap)}"><td class="secname" style="border-left:5px solid ${UPH_CAT_COL[cat]}">${cat}<span class="cap-sub">${io}</span></td>`+
-      `<td>${mem.length}名<span class="cap-sub">実績あり ${known.length}名</span></td>`+
-      `<td>${(Math.round(lh*10)/10)}</td>`+
-      `<td>${avg!=null?Math.round(avg):"—"}</td>`+
-      `<td class="cap-v">${avg!=null?`<b>${fmt(cap)}</b>`:"—"}</td>`+
+    const c=capOf(mem,cat),known=c.n-c.est-c.none;
+    const byF=fl.map(f=>{const m=mem.filter(p=>floorOf(p)===f);return m.length?capN(capOf(m,cat).tp):'<span class="z">—</span>'});
+    rows+=`<tr data-cap="${io}" data-v="${Math.round(c.tp)}"><td class="secname" style="border-left:5px solid ${UPH_CAT_COL[cat]}">${cat}<span class="cap-sub">${io}</span></td>`+
+      `<td>${c.n}名<span class="cap-sub">実績あり ${known}名</span></td>`+
+      `<td>${fmtLHval(c.lh)}</td>`+
+      `<td>${c.uph!=null?Math.round(c.uph):"—"}</td>`+
+      `<td>${capN(c.perH)}</td>`+
+      `<td class="cap-v"><b>${capN(c.tp)}</b></td>`+
+      byF.map(x=>`<td>${x}</td>`).join("")+
       `<td class="cap-d"></td></tr>`;
   }
   if(!rows)return "";
-  return `<div class="sumblock"><h3>工程ごとの見込み処理数<span class="tot" style="font-weight:600">配置した人の 過去30日UPH × LH（実績がない人は工程の平均で計算）</span></h3>`+
-    `<table class="sumtbl cap-tbl"><tr><th>工程</th><th>HC</th><th>LH</th><th>平均UPH</th><th>見込み処理数</th><th>ターゲットUNITとの差</th></tr>${rows}</table></div>`;
+  return `<div class="sumblock"><h3>工程ごとの見込み処理数<span class="tot" style="font-weight:600">配置した人の 過去30日UPH × LH（実績がない人は工程の全体平均で計算）</span></h3>`+
+    `<table class="sumtbl cap-tbl"><tr><th>工程</th><th>HC</th><th>LH</th><th>平均UPH</th><th>時間あたり</th><th>見込みTP</th>${fl.map(f=>`<th>${f}</th>`).join("")}<th>ターゲットUNITとの差</th></tr>${rows}</table></div>`;
 }
 function refreshCap(){
   document.querySelectorAll(".cap-tbl tr[data-cap]").forEach(tr=>{
@@ -2638,7 +2659,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.02.3";
+const APP_VERSION="2026.11.02.4";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -3528,6 +3549,12 @@ render();
 .x-c .sf.n{background:#ede9fe;color:#6d28d9}
 .x-c .fl2{flex:none;align-self:center;margin-left:4px;font-size:9.5px;font-weight:800;font-family:var(--x-mono);border:1px solid var(--x-line);border-radius:3px;padding:0 3px;line-height:14px;color:var(--x-sub)}
 .x-c.adm{box-shadow:0 0 0 2px #fbbf24}
+.x-cap{margin-left:auto;font-weight:700;font-family:var(--x-mono);font-size:10.5px;color:var(--x-sub);white-space:nowrap;letter-spacing:0}
+.x-cap b{color:var(--x-ink,#111827);font-weight:800}
+.x-pz .x-cap{align-self:center;flex:none;font-size:10.5px}
+.x-ah .tp,.x-sh .tp{margin-left:8px;font-weight:700;letter-spacing:0;font-family:var(--x-mono);font-size:11px;color:var(--x-sub)}
+#stats .tpall{border-left:2px solid #e5e7eb;padding-left:10px}
+#stats .tpall i{font-style:normal;display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 3px 0 6px}
 .x-c .xu{flex:none;margin-left:4px;font-size:10px;font-weight:800;border:1.5px solid currentColor;border-radius:4px;padding:0 3px;line-height:13px;background:#fff}
 .x-c.dragging{opacity:.3}
 .x-c.selected{outline:2px solid var(--x-acc);outline-offset:1px}
@@ -3791,6 +3818,13 @@ function X_boxEl(cls, f, loc, mem, label){
   const b = X_el("div", cls + " x-dz" + (mem.length ? "" : (cls === "x-box" ? " empty" : " e")));
   b.dataset.floor = f; b.dataset.loc = loc; b.style.setProperty("--pc", secColor[loc] || "#94a3b8");
   b.innerHTML = `<div class="x-bh${mem.length ? " x-grab" : ""}">${X_esc(label)}<span class="c">${X_wk(mem).length || ""}</span></div>`;
+  // 工程（Stow・Pick・Pack・Receive）の枠は、右上に LH・UPH・TP（全フロア表示は TP だけ）
+  const cat = loc.indexOf("|") > 0 && X_grp(loc) !== "ICQA" ? secCat(loc.split("|")[1]) : null;
+  if (cat && X_wk(mem).length && uphFallback[cat] != null){
+    const c = capOf(mem, cat), small = cls === "x-box";
+    const e = X_el("span", "x-cap", small ? `TP <b>${capN(c.tp)}</b>` : `LH ${fmtLHval(c.lh)}・UPH <b>${c.uph != null ? Math.round(c.uph) : "—"}</b>・TP <b>${capN(c.tp)}</b>`);
+    e.title = capTip(c, cat); b.querySelector(".x-bh").appendChild(e);
+  }
   return b;
 }
 function X_usedSubs(f, pl, pool){
@@ -3912,7 +3946,7 @@ function renderSingle(root){
     const all = inL(base), un = mine.filter(p => locOf(p) === base).sort(sortPeople);
     const b = X_boxEl("x-sbox", f, base, all, PICK_ZONE_LAYOUT.secName);
     if (b.classList.contains("e")) b.classList.remove("e");
-    b.querySelector(".x-bh").insertAdjacentHTML("beforeend", `<span style="font-weight:600;color:var(--x-sub)">ゾーン未割当 ${un.length}</span>`);
+    { const cap = b.querySelector(".x-bh .x-cap"), h = `<span style="font-weight:600;color:var(--x-sub)">ゾーン未割当 ${un.length}</span>`; cap ? cap.insertAdjacentHTML("beforebegin", h) : b.querySelector(".x-bh").insertAdjacentHTML("beforeend", h); }
     const cs = X_el("div", "x-chips"); un.forEach(p => cs.appendChild(X_chip(p, "big"))); b.appendChild(cs);
     const list = X_el("div", "x-pzl");
     const groups = [...PICK_ZONE_LAYOUT.top.flatMap(c => c.groups), ...PICK_ZONE_LAYOUT.bottom];
@@ -3921,6 +3955,7 @@ function renderSingle(root){
       const zd = X_el("div", "x-pz x-dz" + (ps.length ? "" : " emp0")); zd.dataset.floor = f; zd.dataset.loc = loc; zd.style.setProperty("--zc", g.color);
       zd.innerHTML = `<span class="zl">${z}${X_wk(ps).length ? `<i>${X_wk(ps).length}</i>` : ""}</span>`;
       const zc = X_el("div", "x-chips"); ps.forEach(p => zc.appendChild(X_chip(p, "big"))); zd.appendChild(zc);
+      if (X_wk(ps).length && uphFallback.Pick != null){ const c = capOf(ps, "Pick"); const e = X_el("span", "x-cap", `LH ${fmtLHval(c.lh)}・UPH <b>${c.uph != null ? Math.round(c.uph) : "—"}</b>・<b>${capN(c.perH)}</b>/h`); e.title = capTip(c, "Pick"); zd.appendChild(e); }
       list.appendChild(zd);
     }));
     b.appendChild(list);
