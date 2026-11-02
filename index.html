@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.02.7";
+const APP_VERSION="2026.11.03.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4799,6 +4799,28 @@ render();
   }
   window.X_sheetFeed = fetchFeed;
 
+  // シフト表のメンテナンスシート（FCST：日付／unit／日勤／夜勤／IN）の値を、取り込んだ日のFCSTに入れる
+  //  日勤のOUT ← 日勤、夜勤のOUT ← 夜勤、日勤のIN ← IN（夜勤のINはシフト表にないので触らない）
+  //  シフト表の値で上書きする。シフト表に値がない欄は今のまま
+  //  （GAS の応答 j.fcst = {date, unit, day, night, in}。GAS が古く fcst を返さないときは何もしない）
+  async function applyFcst(f){
+    if (!f || !raw()) return "";
+    const v = x => (x == null || x === "" || !isFinite(Number(x))) ? null : Math.max(0, Math.round(Number(x)));
+    const d = v(f.day), n = v(f.night), iN = v(f.in);
+    if (d == null && n == null && iN == null) return "";
+    const path = (X_NEXT && X_NEXT.on ? "next/" : "") + "targetFcst";
+    const cur = await g(path) || {};
+    const pair = x => ({out:Number(x && x.out) || 0, in:Number(x && x.in) || 0});
+    const t = {日勤:pair(cur["日勤"]), 夜勤:pair(cur["夜勤"])};
+    if (d != null) t["日勤"].out = d;
+    if (iN != null) t["日勤"].in = iN;
+    if (n != null) t["夜勤"].out = n;
+    await raw().set(raw().rRef(path), t);
+    try { const el = document.getElementById("fcstCap"); if (el && typeof fcstCapHtml === "function"){ targetFcst = t; el.innerHTML = fcstCapHtml(); } } catch (e) {}
+    const f0 = x => x == null ? "—" : x.toLocaleString();
+    return `日勤OUT ${f0(d)}／夜勤OUT ${f0(n)}／IN ${f0(iN)}`;
+  }
+
   // 設定（URL・鍵・自動取込の時刻）
   async function editCfg(){
     if (!raw()){ alert("まだ接続中です。少し待ってからもう一度押してください"); return; }
@@ -4842,6 +4864,10 @@ render();
           // そのまま取込実行へ（確認のダイアログは出る。キャンセルすれば取り込まない）
           await execPaste();
           if (document.getElementById("pasteModal").classList.contains("open")) st.textContent = `${i.label}分を読み込みました（取り込みはキャンセルされました）。もう一度「シフト表から取り込む」を押すと取り込めます`;
+          else {
+            try { const fm = await applyFcst(j.fcst); if (fm){ X_logAdd(`シフト表からFCST（${i.label}分）：${fm}`); if (typeof toast === "function") toast(`FCSTもシフト表から入れました：${fm}`); } }
+            catch (e){ console.warn("FCSTの取込", e); }
+          }
         } catch (e){ st.className = "st ng"; st.textContent = e.message; }
       };
     }
@@ -4912,7 +4938,7 @@ render();
       try { j = await fetchFeed(D); } catch (e){ await raw().set(raw().rRef("autoImport/" + D), {by:me, at:Date.now(), empty:true, error:e.message}); return; }
       if (!j.total){ await raw().set(raw().rRef("autoImport/" + D), {by:me, at:Date.now(), empty:true}); return; }
       // 翌日の画面で取り込む（当日の画面を開いていたPCは、取り込んだあと当日の画面に戻す）
-      try { sessionStorage.setItem(AUTO_KEY, JSON.stringify({date:D, text:j.text, by:me, back:!X_NEXT.on})); } catch (e) { return; }
+      try { sessionStorage.setItem(AUTO_KEY, JSON.stringify({date:D, text:j.text, fcst:j.fcst || null, by:me, back:!X_NEXT.on})); } catch (e) { return; }
       if (X_NEXT.on) runPending(); else X_NEXT.setMode("next");
     } catch (e) { console.error("sheet autoImport", e); }
     finally { busy = false; }
@@ -4945,6 +4971,7 @@ render();
       await new Promise(r => setTimeout(r, 1500));
       try { await raw().update(raw().rRef("next/meta/imported"), {auto:true}); } catch (e) {}
       try { X_logAdd(`シフト表から自動取込（${i.label}分）`); } catch (e) {}
+      try { const fm = await applyFcst(job.fcst); if (fm) X_logAdd(`シフト表からFCST（${i.label}分）：${fm}`); } catch (e) { console.warn("FCSTの自動取込", e); }
     }
     await raw().set(raw().rRef("autoImport/" + job.date), {by:job.by, at:Date.now(), done:true});
     const all = await g("autoImport") || {};

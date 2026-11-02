@@ -1,5 +1,5 @@
 {
-  "version": "2026.11.02.7",
-  "date": "2026-11-02",
-  "notes": "見込みTP・UPHの並びを Pick→Pack→Receive→Stow に。INのForkをStowとして計上（カードのUPH・見込みTPとも）。FCSTを起点にした見込みを追加。フロア画面のOUTBOUND・INBOUND見出しに今のフロアのUPH・TP（INはReceive・Stow別）。サマリのフロア別合計にOUT・INのUPH・TP列、新しい表「FCSTに対する見込み」（工程ごとのTP・FCSTとの差・必要LH・LHの過不足、OUTはPick・Packの少ない方で出荷できる数と全LHで見た全体UPH）、フロアごとの工程表にUPH・TP列。"
+  "version": "2026.11.03.1",
+  "date": "2026-11-03",
+  "notes": "シフト表から名簿を取り込むとき（手動・自動とも）、メンテナンスシートのFCSTも取り込む（日勤OUT←日勤、夜勤OUT←夜勤、日勤IN←IN。シフト表の値で上書き）。"
 }
