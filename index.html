@@ -335,6 +335,12 @@ body.dragging-active .card:not(.ghost-card):hover{transform:none;box-shadow:0 1p
 .badge.fork{background:var(--fork);color:#fff}
 .badge.day{background:#dbeafe;color:#1d4ed8}
 .badge.night{background:#1e293b;color:#fff}
+/* 個人の過去30日UPH（間接打刻管理・FCLM）── 配置先の工程の値をカード右上に小さく */
+.card .uphv{position:absolute;top:-7px;right:3px;font-size:9px;font-weight:800;line-height:12px;padding:0 3px;border-radius:6px;background:#fff;border:1px solid currentColor;pointer-events:none}
+.multi-mode .card .uphv{display:none}
+.cap-tbl td.cap-v b{font-size:15px}
+.cap-tbl .cap-sub{display:block;font-size:10px;color:#64748b;font-weight:600}
+.cap-tbl .diff-plus{color:#15803d}.cap-tbl .diff-minus{color:#dc2626}
 .card .admin-mark{position:absolute;top:-7px;left:-6px;width:15px;height:15px;display:flex;align-items:center;justify-content:center;background:#f59e0b;border-radius:50%;border:1.5px solid var(--panel);font-size:8px;line-height:1;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.2)}
 .card.admin{box-shadow:0 0 0 2px #fbbf24,0 1px 2px rgba(245,158,11,.25)}
 .card.selected{box-shadow:0 0 0 2px #2563eb,0 2px 8px rgba(37,99,235,.3);background:#eff6ff}
@@ -1427,6 +1433,28 @@ function applyFloorTheme(){
   const stats=document.getElementById("stats");
   if(stats)stats.style.background=`hsl(${h},45%,96%)`;
 }
+// ===== 個人の過去30日UPH（間接打刻管理 indirect-relay-hfo1 の作業変化モニターのデータ）=====
+//  名前で突き合わせる（空白・全角半角の違いは無視）。同じ名前が複数いる人は使わない
+const UPH_API="https://indirect-relay-hfo1.takahiro884.workers.dev/api/fr/uphall?days=30&k=1540850d9c168e02e13c9c10c06d8bed";
+const UPH_CAT_COL={Stow:"#16a34a",Pick:"#0891b2",Pack:"#db2777",Receive:"#ca8a04"};
+let uphByName=new Map(),uphAt=0;
+const uphNorm=s=>String(s||"").normalize("NFKC").replace(/[\s　・.,，]/g,"").toLowerCase();
+function loadUph(){
+  fetch(UPH_API,{cache:"no-store"}).then(r=>r.json()).then(j=>{
+    if(!j||!j.ok)return;
+    const m=new Map(),dup=new Set();
+    for(const p of j.people||[])for(const n of [p.name,p.alias]){const k=uphNorm(n);if(!k)continue;if(m.has(k)&&m.get(k)!==p.cats)dup.add(k);m.set(k,p.cats)}
+    dup.forEach(k=>m.delete(k));
+    uphByName=m;uphAt=Date.now();render();
+    const sm=document.getElementById("summaryModal");if(sm&&sm.classList.contains("open"))openSummary();
+  }).catch(e=>console.warn("UPH読込",e));
+}
+setTimeout(loadUph,1500);setInterval(loadUph,30*60000);
+// 工程（セクション名）→ FCLM の作業分類
+function secCat(sec){const s=String(sec||"");return /stow/i.test(s)?"Stow":/pick/i.test(s)?"Pick":/pack/i.test(s)?"Pack":/receiv|recive|rcv|decant|prep/i.test(s)?"Receive":null}
+function locCat(p){const l=locOf(p);if(!l||l.indexOf("|")<0)return null;return secCat(l.split("|")[1])}
+function uphOfP(p,cat){if(!cat)return null;const c=uphByName.get(uphNorm(displayName(p)))||uphByName.get(uphNorm(p.name));return c&&c[cat]?c[cat].uph:null}
+
 function render(){
   buildColors();renderFloorTabs();
   applyFloorTheme();
@@ -1702,6 +1730,8 @@ function card(p){
   const nameInitial=(!dn||/^\d+$/.test(dn.trim()))?coChar:dn.trim()[0];
   c.innerHTML=`${p.admin?'<span class="admin-mark">👑</span>':''}<span class="name-wrap"><span class="name">${dn}</span></span><span class="co" style="background:${st.bg};color:${st.fg}"><span class="co-company">${coChar}</span><span class="co-initial">${nameInitial}</span></span><span class="badges">${p.fork?'<span class="badge fork">F</span>':''}<span class="badge shift ${p.shift==='日勤'?'day':'night'}">${p.shift==='日勤'?'日':'夜'}</span></span>`;
   // 名前がはみ出す場合のみマーキー対象に(レンダー後に判定)
+  { const cat=locCat(p),u=uphOfP(p,cat);
+    if(u!=null){const b=document.createElement("span");b.className="uphv";b.style.color=UPH_CAT_COL[cat];b.textContent=u;c.appendChild(b);c.title+=`\n過去30日の${cat} UPH ${u}`} }
   c.dataset.fullname=dn;
   c.dataset.uidkey=uidEnc(uid(p));
   if(selectedUids.has(c.dataset.uidkey))c.classList.add("selected");
@@ -2085,6 +2115,7 @@ function openSummary(){
     `<textarea id="summaryNote" class="sumnote-area" placeholder="申し送り・注意事項などを入力(全端末で共有されます)" oninput="onSummaryNoteInput(this.value)"></textarea>`+
     `</div>`;
   html+=`</div>`;
+  html+=capacityHtml(vAct);
 
   // フロアごとの工程別内訳(管理者は別枠で各セクションに併記。待機中の管理者=休日は別表示)
   fl.forEach(f=>{
@@ -2395,6 +2426,42 @@ function refreshTP(){
   };
   updateDiff("diffOut",tpOut,tUPH().out,tUnit().out);
   updateDiff("diffIn",tpIn,tUPH().in,tUnit().in);
+  refreshCap();
+}
+
+// ===== 工程ごとの見込み処理数（配置した人の 過去30日UPH × LH の合計）=====
+//  UPHの実績がない人は、その工程で実績がある人の平均UPHで見込む
+const CAP_ROWS=[["Receive","IN"],["Stow","IN"],["Pick","OUT"],["Pack","OUT"]];
+function capacityHtml(act){
+  if(!uphByName.size)return `<div class="sumblock"><h3>工程ごとの見込み処理数</h3><p class="sumnote">個人のUPH（間接打刻管理）を読み込めていません。</p></div>`;
+  const fmt=n=>Math.round(n).toLocaleString("ja-JP");
+  let rows="";
+  for(const [cat,io] of CAP_ROWS){
+    const mem=act.filter(p=>locCat(p)===cat);
+    if(!mem.length)continue;
+    const known=mem.map(p=>[p,uphOfP(p,cat)]).filter(x=>x[1]!=null);
+    const avg=known.length?known.reduce((s,x)=>s+x[1],0)/known.length:null;
+    let cap=0,lh=0;
+    for(const p of mem){const u=uphOfP(p,cat)??avg;lh+=p.lh||0;if(u!=null)cap+=(p.lh||0)*u}
+    rows+=`<tr data-cap="${io}" data-v="${Math.round(cap)}"><td class="secname" style="border-left:5px solid ${UPH_CAT_COL[cat]}">${cat}<span class="cap-sub">${io}</span></td>`+
+      `<td>${mem.length}名<span class="cap-sub">実績あり ${known.length}名</span></td>`+
+      `<td>${(Math.round(lh*10)/10)}</td>`+
+      `<td>${avg!=null?Math.round(avg):"—"}</td>`+
+      `<td class="cap-v">${avg!=null?`<b>${fmt(cap)}</b>`:"—"}</td>`+
+      `<td class="cap-d"></td></tr>`;
+  }
+  if(!rows)return "";
+  return `<div class="sumblock"><h3>工程ごとの見込み処理数<span class="tot" style="font-weight:600">配置した人の 過去30日UPH × LH（実績がない人は工程の平均で計算）</span></h3>`+
+    `<table class="sumtbl cap-tbl"><tr><th>工程</th><th>HC</th><th>LH</th><th>平均UPH</th><th>見込み処理数</th><th>ターゲットUNITとの差</th></tr>${rows}</table></div>`;
+}
+function refreshCap(){
+  document.querySelectorAll(".cap-tbl tr[data-cap]").forEach(tr=>{
+    const unit=tUnit()[tr.dataset.cap==="OUT"?"out":"in"],v=Number(tr.dataset.v)||0,cell=tr.querySelector(".cap-d");
+    if(!cell)return;
+    if(!(unit>0)){cell.innerHTML='<span class="diff-hint">UNIT未入力</span>';return}
+    const d=v-unit;
+    cell.innerHTML=`<b class="${d>=0?"diff-plus":"diff-minus"}">${d>0?"+":d<0?"−":"±"}${Math.abs(d).toLocaleString("ja-JP")}</b><span class="cap-sub">${d>=0?"余力":"不足"}</span>`;
+  });
 }
 
 document.addEventListener("keydown",e=>{
@@ -2552,7 +2619,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.10.21.1";
+const APP_VERSION="2026.11.02.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
