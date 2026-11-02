@@ -2638,7 +2638,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.02.2";
+const APP_VERSION="2026.11.02.3";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -4114,7 +4114,9 @@ let X_pop = null;
 function X_showPop(p, el, auto){
   X_hidePop();
   const pop = X_el("div", "x-pop");
-  pop.innerHTML = `<b>${X_esc(displayName(p))}</b>${X_esc(p.role)}${p.admin ? "・管理者" : ""}<br>${X_esc(X_place(floorOf(p), locOf(p)))}・LH ${fmtLHval(p.lh || 0)}<br>${p.shift}${p.fork ? "・フォーク" : ""}`;
+  const uc = uphCatsOf(p), ucs = uc ? ["Stow", "Pick", "Pack", "Receive"].filter(k => uc[k]) : [];
+  pop.innerHTML = `<b>${X_esc(displayName(p))}</b>${X_esc(p.role)}${p.admin ? "・管理者" : ""}<br>${X_esc(X_place(floorOf(p), locOf(p)))}・LH ${fmtLHval(p.lh || 0)}<br>${p.shift}${p.fork ? "・フォーク" : ""}`
+    + (ucs.length ? `<br><span style="font-size:.85em;opacity:.75">過去30日のUPH平均</span><br>${ucs.map(k => `<span style="display:inline-block;margin:2px 4px 0 0;padding:0 5px;border:1.5px solid ${UPH_CAT_COL[k]};border-radius:4px;color:#fff">${k} <b style="display:inline">${uc[k].uph}</b></span>`).join("")}` : "");
   document.body.appendChild(pop); X_pop = pop;
   const r = el.getBoundingClientRect();
   const left = Math.min(innerWidth - pop.offsetWidth - 10, Math.max(8, r.left + r.width / 2 - pop.offsetWidth / 2));
