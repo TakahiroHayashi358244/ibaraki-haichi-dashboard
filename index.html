@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.9";
+const APP_VERSION="2026.11.20.10";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5580,7 +5580,6 @@ window.ODR = (function(){
       h += `<details id="od-det-${x.f}" data-f="${x.f}"${openDet.has(x.f) ? " open" : ""} ontoggle="ODR._tog(this)"><summary><span class="fl" style="background:hsl(${floorHue(x.f)},55%,42%);color:#fff;border-radius:6px;padding:1px 9px">${x.f}</span>
         ${Object.entries(pp).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `<span style="font-weight:600;color:var(--sub);font-size:12px">${esc(k)} ${nf(v)}</span>`).join("")}
         <span class="n">${nf(x.total)}・${x.rows.length}行</span></summary><div class="in">`;
-      if (zs.length) h += `<div class="od-zones">${zs.map(([z, v]) => { const n = zoneHC(x.f, z); return `<span class="${n ? "" : "un"}">ロケ ${esc(z)}<b>${nf(v)}</b><em>${n ? n + "名" : "未配置"}</em></span>`; }).join("")}</div>`;
       if (!x.rows.length) h += `<div class="od-note">データなし</div>`;
       else {
         h += `<table class="od-t"><thead><tr><th>${esc(S.c.h[S.c.iPP] || "Process Path")}</th><th style="text-align:left">${esc(S.c.h[S.c.iPA] || "Pick Area")}</th>${S.c.nums.map(i => `<th>${esc(S.c.h[i]).replace(/\n/g, "<br>")}</th>`).join("")}</tr></thead><tbody>`;
