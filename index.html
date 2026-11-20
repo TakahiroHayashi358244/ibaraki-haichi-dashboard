@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.10";
+const APP_VERSION="2026.11.20.11";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5147,6 +5147,8 @@ body.od-stats-closed #stats{display:none}
 #odFut input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#0f766e}
 #odFut.off{color:#64748b}
 #odCpt .cc.excl{opacity:.35}
+#odCpt .sep{display:flex;align-items:center;padding:0 6px;writing-mode:vertical-rl;font-size:9.5px;font-weight:800;color:#64748b;background:#f1f5f9;border-left:2px dashed #94a3b8;letter-spacing:1px}
+#odCpt .cc.out{background:#f8fafc}
 .od-cpt-mini{display:inline-flex;flex-wrap:wrap;gap:3px;font-size:11px;font-weight:700;color:#475569}
 .od-cpt-mini span{border:1px solid #cbd5e1;border-radius:5px;padding:0 5px;background:#fff;white-space:nowrap}
 .od-cpt-mini span b{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#0f172a;margin-left:3px}
@@ -5322,7 +5324,7 @@ window.ODR = (function(){
   function metric(){
     const c = cols(), want = localCol() || (cfg && cfg.col);
     if (want === "__sum") return {key: "__sum", label: "数値列の合計", idx: c.nums};
-    if (want === "__today") return {key: "__today", label: "当日CPT分（Future CPT以外）", idx: c.nums.filter(i => !/future/i.test(c.h[i]))};
+    if (want === "__today") return {key: "__today", label: "シフト内のCPT分・" + shiftCutTxt(), idx: cpts().filter(x => x.inShift).map(x => x.i)};
     if (want){ const i = c.h.indexOf(want); if (i >= 0 && c.nums.includes(i)) return {key: want, label: want, idx: [i]}; }
     const t = c.nums.find(i => /total|合計|sum/i.test(c.h[i]));
     if (t != null) return {key: c.h[t], label: c.h[t], idx: [t]};
@@ -5332,8 +5334,17 @@ window.ODR = (function(){
 
   /* ---------- CPT 別 ----------
      見出し「1st CPT\n2026/11/20 11:30:00」→ 短い名前「1st 11:30」と時刻。Passed（過ぎたCPT）・Future はそのまま */
+  // シフト内の区切り：日勤＝その日の20:00まで、夜勤＝翌朝8:00まで（今のシフト表示に合わせる）
+  //  C4 は時間がたつと 1st・2nd… がずれていくので、列の名前ではなく見出しのCPT時刻で分ける
+  function shiftCut(){
+    const now = new Date(), d = new Date(now);
+    if (curShift === "夜勤"){ d.setHours(8, 0, 0, 0); if (now.getHours() >= 8) d.setDate(d.getDate() + 1); }
+    else d.setHours(20, 0, 0, 0);
+    return d.getTime();
+  }
+  const shiftCutTxt = () => curShift === "夜勤" ? "夜勤〜翌8:00" : "日勤〜20:00";
   function cpts(){
-    const c = cols(), now = Date.now();
+    const c = cols(), now = Date.now(), cut = shiftCut();
     const list = c.nums.map(i => {
       const h = String(c.h[i] || ""), m = h.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
       const t = m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() : null;
@@ -5341,13 +5352,14 @@ window.ODR = (function(){
       return {i, h, t, label: /passed/i.test(h) ? "Passed" : /future/i.test(h) ? "Future" : (t ? `${name} ${pad(new Date(t).getHours())}:${pad(new Date(t).getMinutes())}` : name), passed: /passed/i.test(h) || (t != null && t < now), future: /future/i.test(h)};
     });
     const nx = list.filter(x => x.t && x.t >= now).sort((a, b) => a.t - b.t)[0];
-    list.forEach(x => x.next = !!(nx && x === nx));
+    // inShift：シフト内（Passed と区切りまでのCPT）／それ以外（区切りより後のCPT・Future）はシフト外
+    list.forEach(x => { x.next = !!(nx && x === nx); x.inShift = !x.future && (/passed/i.test(x.h) || x.t == null || x.t <= cut); });
     return list;
   }
   const cptSum = (rows, i) => rows.reduce((s, r) => s + num(r[i]), 0);
   // 当日分（Future を除く）の CPT とその色
   const CPT_COLORS = ["#0f766e", "#2563eb", "#7c3aed", "#d97706", "#db2777", "#0891b2", "#65a30d"];
-  const todayCpts = () => cpts().filter(x => !x.future);
+  const todayCpts = () => cpts().filter(x => x.inShift);
   const cptColor = (x, k) => /passed/i.test(x.h) ? "#dc2626" : CPT_COLORS[k % CPT_COLORS.length];
   function cptLegend(){
     return todayCpts().map((x, k) => `<span><i style="background:${cptColor(x, k)}"></i>${esc(x.label)}</span>`).join("");
@@ -5355,7 +5367,7 @@ window.ODR = (function(){
   // 横の積み上げ帯：長さ＝当日分の合計（max に対する割合。max=0 なら満幅）、区切り＝CPTごとの比率
   function cptBar(rows, max){
     const L = todayCpts(), vals = L.map(x => cptSum(rows, x.i)), tot = vals.reduce((a, b) => a + b, 0);
-    if (!tot) return `<div class="od-sbar empty">当日分なし</div>`;
+    if (!tot) return `<div class="od-sbar empty">シフト内なし</div>`;
     const w = max ? tot / max * 100 : 100;
     const segs = L.map((x, k) => { const v = vals[k]; if (!v) return ""; const pct = v / tot * 100;
       return `<i style="width:${pct}%;background:${cptColor(x, k)}" title="${esc(x.label)}：${nf(v)}個（${pct.toFixed(1)}%）">${(w / 100) * (pct / 100) * 320 >= 30 ? `<b>${nf(v)}</b><small>${Math.round(pct)}%</small>` : ""}</i>`; }).join("");
@@ -5379,8 +5391,8 @@ window.ODR = (function(){
       btn.onclick = () => { const c = !document.body.classList.contains("od-stats-closed"); set(c); try { localStorage.setItem("haichi_stats_open", c ? "0" : "1"); } catch (e) {} if (typeof X_sizeMain === "function"){ const m = document.querySelector("#scroll .x-main"); if (m) X_sizeMain(m); } };
       el = document.createElement("div"); el.id = "odCpt";
       // 右に「Future含む」チェック：外すと Future CPT を除いた数で、ゾーン・フロア・オーダー画面もすべて数える（このPCだけ）
-      const fut = document.createElement("label"); fut.id = "odFut"; fut.title = "外すと Future CPT を除いた当日分で数えます（ゾーン・フロアの数も同じ。このPCだけ）";
-      fut.innerHTML = `<input type="checkbox"><span>Future含む</span>`;
+      const fut = document.createElement("label"); fut.id = "odFut"; fut.title = "外すと、シフト内（日勤は20:00まで・夜勤は翌朝8:00まで）のCPTだけで数えます（ゾーン・フロアの数も同じ。このPCだけ）";
+      fut.innerHTML = `<input type="checkbox"><span>シフト外も含む</span>`;
       fut.querySelector("input").onchange = ev => setCol(ev.target.checked ? "__sum" : "__today");
       bar.append(btn, el, fut);
       const st = document.getElementById("stats"); (st ? st.parentNode : document.body).insertBefore(bar, st ? st.nextSibling : null);
@@ -5397,10 +5409,11 @@ window.ODR = (function(){
     // 3行：CPT名／数（1フロア表示は「そのフロア／全体」）／Air の数（Pick Area が _air のもの）
     const c = cols(), isAir = r => /_air/i.test(String(r[c.iPA] || ""));
     const fa = single ? fr.filter(isAir) : null, aa = al.filter(isAir);
-    el.innerHTML = `<div class="ct" style="${single ? `background:hsl(${floorHue(curFloor)},55%,42%)` : ""}">CPT<small>${single ? esc(curFloor) + "／全体" : "全体"}</small></div>` + L.map(x => {
+    const firstOut = L.findIndex(x => !x.inShift);
+    el.innerHTML = `<div class="ct" style="${single ? `background:hsl(${floorHue(curFloor)},55%,42%)` : ""}">CPT<small>${single ? esc(curFloor) + "／全体" : "全体"}</small></div>` + L.map((x, k) => {
       const v = single ? cptSum(fr, x.i) : cptSum(al, x.i), a = cptSum(al, x.i);
       const av = single ? cptSum(fa, x.i) : cptSum(aa, x.i), aA = cptSum(aa, x.i);
-      return `<div class="cc ${cptCls(x, v)}${M.idx.includes(x.i) ? "" : " excl"}" title="${esc(x.h.replace(/\n/g, " "))}${single ? `\n${curFloor}：${nf(v)}（Air ${nf(av)}）　全体：${nf(a)}（Air ${nf(aA)}）` : `\n全体：${nf(a)}（Air ${nf(aA)}）`}">`
+      return (k === firstOut ? `<div class="sep" title="${esc(shiftCutTxt())} より後">シフト外</div>` : "") + `<div class="cc ${cptCls(x, v)}${M.idx.includes(x.i) ? "" : " excl"}${x.inShift ? "" : " out"}" title="${esc(x.h.replace(/\n/g, " "))}${single ? `\n${curFloor}：${nf(v)}（Air ${nf(av)}）　全体：${nf(a)}（Air ${nf(aA)}）` : `\n全体：${nf(a)}（Air ${nf(aA)}）`}">`
         + `<span class="l">${esc(x.label)}${x.next ? "・" + leftTxt(x) : ""}</span>`
         + `<span class="v"><b>${nf(v)}</b>${single ? `／${nf(a)}` : ""}</span>`
         + `<span class="a"><em>Air</em>${nf(av)}${single ? `／${nf(aA)}` : ""}</span></div>`;
@@ -5520,7 +5533,7 @@ window.ODR = (function(){
     }
     const S = stats(), a = ageMin();
     const stTxt = a == null ? "更新時刻不明" : `最終更新 ${hm(data.at)}（${Math.round(a)}分前）`;
-    const opt = [`<option value="__sum"${S.m.key === "__sum" ? " selected" : ""}>数値列の合計</option>`, `<option value="__today"${S.m.key === "__today" ? " selected" : ""}>当日CPT分（Future CPT以外）</option>`]
+    const opt = [`<option value="__sum"${S.m.key === "__sum" ? " selected" : ""}>数値列の合計</option>`, `<option value="__today"${S.m.key === "__today" ? " selected" : ""}>シフト内のCPT分・${shiftCutTxt()}</option>`]
       .concat(S.c.nums.map(i => `<option value="${esc(S.c.h[i])}"${S.m.key === S.c.h[i] ? " selected" : ""}>${esc(String(S.c.h[i]).replace(/\s*\n\s*/g, " "))}</option>`)).join("");
     const maxT = Math.max(1, ...S.fs.map(x => x.total));
     const maxToday = Math.max(1, ...S.fs.map(x => todayCpts().reduce((s, c) => s + cptSum(x.rows, c.i), 0)));
@@ -5539,8 +5552,8 @@ window.ODR = (function(){
       <div class="od-kpi"><div class="l">Pick 処理能力</div><div class="v">${S.perH ? nf(S.perH) : "—"}<small>/h</small></div><div class="s">過去30日UPHの合計</div></div>
       <div class="od-kpi"><div class="l">いちばん時間がかかるフロア</div><div class="v">${S.worst ? S.worst.f + " " + hrsTxt(S.worst.hrs) : "—"}</div><div class="s">${S.noPick.length ? `<b style="color:#b91c1c">Pick配置なし：${S.noPick.join("・")}</b>` : S.worst ? endTxt(S.worst.hrs) + " ごろ消化（全体を均した場合 " + hrsTxt(S.hrs) + "）" : "Pick配置・UPHがあると計算"}</div></div>
     </div>`;
-    h += `<div class="od-lg">当日CPT：${cptLegend()}</div>`;
-    h += `<table class="od-t"><thead><tr><th>フロア</th><th>オーダー</th><th style="text-align:left">当日CPT別の個数・比率</th><th>Pick 人数</th><th>Pick LH</th><th>処理能力/h</th><th>消化見込み</th><th>1人あたり</th><th>目安人数</th><th>過不足</th></tr></thead><tbody>`;
+    h += `<div class="od-lg">シフト内のCPT ${shiftCutTxt()}：${cptLegend()}</div>`;
+    h += `<table class="od-t"><thead><tr><th>フロア</th><th>オーダー</th><th style="text-align:left">シフト内CPT別の個数・比率</th><th>Pick 人数</th><th>Pick LH</th><th>処理能力/h</th><th>消化見込み</th><th>1人あたり</th><th>目安人数</th><th>過不足</th></tr></thead><tbody>`;
     S.fs.forEach(x => {
       const col = `hsl(${floorHue(x.f)},55%,42%)`;
       const pm = Math.round(x.diff * 10) / 10;
@@ -5558,13 +5571,13 @@ window.ODR = (function(){
     h += `</tbody></table>
       <div class="od-note">・Pick 人数／LH は、今の配置で各フロアの OUTBOUND「Pick」工程（ゾーン含む）にいる人です（管理者・待機・欠勤・休日は除く）。<br>
       ・処理能力/h は、その人たちの過去30日 Pick UPH の合計（実績がない人は Pick の全体平均）。消化見込み＝オーダー ÷ 処理能力/h（数える列がユニット数のときの目安）。${hasUph ? "" : "<b>UPHがまだ読み込まれていないため計算できません。</b>"}<br>
-      ・当日CPT別＝Passed と当日の各CPT（Future は除く）の個数。帯の長さは当日分の多さ（いちばん多いフロアが満幅）、中の区切りはCPTごとの比率です（合計行は全体の比率）。<br>
+      ・シフト内CPT別＝Passed と、シフトの区切り（日勤は20:00、夜勤は翌朝8:00）までのCPTの個数。区切りより後のCPTと Future はシフト外として除きます。帯の長さは当日分の多さ（いちばん多いフロアが満幅）、中の区切りはCPTごとの比率です（合計行は全体の比率）。<br>
       ・目安人数＝Pick の総人数をオーダー比で配分した人数。過不足が <span class="od-pm minus">マイナス</span> のフロアは人が足りず、<span class="od-pm plus">プラス</span> のフロアは余裕があります。</div>`;
 
     // CPT 別 × フロア
     { const L = cpts();
       if (L.length){
-        h += `<div class="od-sec"><h3>CPT別のオーダー</h3><table class="od-t"><thead><tr><th>フロア</th>${L.map(x => `<th style="${x.next ? "color:#c2410c" : ""}">${esc(x.label)}${x.next ? "<br><small>" + leftTxt(x) + "</small>" : ""}</th>`).join("")}<th>合計</th></tr></thead><tbody>`;
+        h += `<div class="od-sec"><h3>CPT別のオーダー</h3><table class="od-t"><thead><tr><th>フロア</th>${L.map(x => `<th style="${x.next ? "color:#c2410c" : x.inShift ? "" : "color:#94a3b8;background:#f1f5f9"}">${x.inShift ? "" : "<small>シフト外</small><br>"}${esc(x.label)}${x.next ? "<br><small>" + leftTxt(x) + "</small>" : ""}</th>`).join("")}<th>合計</th></tr></thead><tbody>`;
         S.fs.forEach(x => { h += `<tr><td><span class="fl" style="background:hsl(${floorHue(x.f)},55%,42%)">${x.f}</span></td>${L.map(c => { const v = cptSum(x.rows, c.i); return `<td style="${c.passed && v ? "color:#dc2626;font-weight:800" : c.next ? "color:#c2410c;font-weight:800" : ""}">${nf(v)}</td>`; }).join("")}<td><b>${nf(L.reduce((s, c) => s + cptSum(x.rows, c.i), 0))}</b></td></tr>`; });
         const all = allRows();
         h += `<tr class="tot"><td>合計</td>${L.map(c => `<td>${nf(cptSum(all, c.i))}</td>`).join("")}<td>${nf(L.reduce((s, c) => s + cptSum(all, c.i), 0))}</td></tr></tbody></table>
