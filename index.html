@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.14";
+const APP_VERSION="2026.11.21.1";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5226,6 +5226,7 @@ table.od-t th:first-child,table.od-t td:first-child{text-align:left}
 table.od-t td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
 table.od-t tr.tot td{font-weight:800;background:#fffbea}
 table.od-t td.oc{font-size:17px;font-weight:900;color:#0f766e}
+table.od-t small.od-air{margin-left:7px;font-size:12px;font-weight:800;color:#0369a1;white-space:nowrap}
 table.od-t td .fl{display:inline-block;color:#fff;font-weight:800;border-radius:6px;padding:1px 9px;font-family:inherit}
 table.od-t td.bar{width:34%;min-width:260px}
 table.od-t td.od-go{cursor:pointer}
@@ -5589,11 +5590,13 @@ window.ODR = (function(){
     </div>`;
     h += `<div class="od-lg">シフト内のCPT ${shiftCutTxt()}：${cptLegend()}</div>`;
     h += `<table class="od-t"><thead><tr><th>フロア</th><th>オーダー</th><th style="text-align:left">シフト内CPT別の個数・比率</th><th>Pick 人数</th><th>Pick LH</th><th>処理能力/h</th><th>消化見込み</th><th>1人あたり</th><th>目安人数</th><th>過不足</th></tr></thead><tbody>`;
+    const airPA = (() => { const c = cols(); return r => /_air/i.test(String(r[c.iPA] || "")); })();
+    const airOf = rows => rows.filter(airPA).reduce((s, r) => s + valOf(r, S.m), 0);
     S.fs.forEach(x => {
       const col = `hsl(${floorHue(x.f)},55%,42%)`;
       const pm = Math.round(x.diff * 10) / 10;
       h += `<tr><td><span class="fl" style="background:${col}">${x.f}</span></td>
-        <td class="oc">${nf(x.total)}</td>
+        <td class="oc">${nf(x.total)}<small class="od-air">Air ${nf(airOf(x.rows))}</small></td>
         <td class="bar od-go" onclick="ODR.goFloor('${x.f}')" title="${x.f} の明細を開く">${cptBar(x.rows, maxToday)}</td>
         <td>${x.hc}</td><td>${fmtLHval(x.lh)}</td>
         <td>${x.perH ? nf(x.perH) : "—"}</td>
@@ -5602,7 +5605,7 @@ window.ODR = (function(){
         <td>${S.hc ? (Math.round(x.target * 10) / 10).toFixed(1) : "—"}</td>
         <td>${S.hc && S.total ? `<span class="od-pm ${pm > 0.4 ? "plus" : pm < -0.4 ? "minus" : ""}">${pm > 0 ? "+" : ""}${pm.toFixed(1)}</span>` : "—"}</td></tr>`;
     });
-    h += `<tr class="tot"><td>合計</td><td>${nf(S.total)}</td><td class="bar">${cptBar(allRows(), 0)}</td><td>${S.hc}</td><td>${fmtLHval(S.lh)}</td><td>${S.perH ? nf(S.perH) : "—"}</td><td>${hrsTxt(S.hrs)}</td><td>${S.hc ? nf(S.total / S.hc) : "—"}</td><td>${S.hc}</td><td></td></tr>`;
+    h += `<tr class="tot"><td>合計</td><td>${nf(S.total)}<small class="od-air">Air ${nf(airOf(allRows()))}</small></td><td class="bar">${cptBar(allRows(), 0)}</td><td>${S.hc}</td><td>${fmtLHval(S.lh)}</td><td>${S.perH ? nf(S.perH) : "—"}</td><td>${hrsTxt(S.hrs)}</td><td>${S.hc ? nf(S.total / S.hc) : "—"}</td><td>${S.hc}</td><td></td></tr>`;
     h += `</tbody></table>
       <div class="od-note">・Pick 人数／LH は、今の配置で各フロアの OUTBOUND「Pick」工程（ゾーン含む）にいる人です（管理者・待機・欠勤・休日は除く）。<br>
       ・処理能力/h は、その人たちの過去30日 Pick UPH の合計（実績がない人は Pick の全体平均）。消化見込み＝オーダー ÷ 処理能力/h（数える列がユニット数のときの目安）。${hasUph ? "" : "<b>UPHがまだ読み込まれていないため計算できません。</b>"}<br>
