@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.8";
+const APP_VERSION="2026.11.20.9";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5221,6 +5221,11 @@ table.od-t tr.tot td{font-weight:800;background:#fffbea}
 table.od-t td.oc{font-size:17px;font-weight:900;color:#0f766e}
 table.od-t td .fl{display:inline-block;color:#fff;font-weight:800;border-radius:6px;padding:1px 9px;font-family:inherit}
 table.od-t td.bar{width:34%;min-width:260px}
+table.od-t td.od-go{cursor:pointer}
+table.od-t td.od-go:hover .od-sbar .in{box-shadow:0 0 0 2px #0f766e}
+.od-sec details{scroll-margin-top:10px}
+.od-sec details.od-flash{animation:odFlash 1.4s ease}
+@keyframes odFlash{0%{box-shadow:0 0 0 3px #0f766e}100%{box-shadow:0 0 0 0 transparent}}
 .od-lg{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 6px;font-weight:700;font-size:11px;color:var(--sub)}
 .od-lg span{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
 .od-lg i{display:inline-block;width:10px;height:10px;border-radius:2px}
@@ -5494,6 +5499,16 @@ window.ODR = (function(){
 
   /* ---------- 画面 ---------- */
   function open(){ document.getElementById("orderModal").classList.add("open"); paintModal(); refresh(true); }
+  // 明細（フロア別）の開閉を覚えておく（3分ごとのデータ更新で閉じないように）
+  const openDet = new Set();
+  function _tog(el){ const f = el.dataset.f; if (el.open) openDet.add(f); else openDet.delete(f); }
+  function goFloor(f){
+    openDet.add(f);
+    const d = document.getElementById("od-det-" + f); if (!d) return;
+    d.open = true;
+    d.scrollIntoView({behavior: "smooth", block: "start"});
+    d.classList.remove("od-flash"); void d.offsetWidth; d.classList.add("od-flash");
+  }
   function close(){ document.getElementById("orderModal").classList.remove("open"); }
 
   function paintModal(){
@@ -5531,7 +5546,7 @@ window.ODR = (function(){
       const pm = Math.round(x.diff * 10) / 10;
       h += `<tr><td><span class="fl" style="background:${col}">${x.f}</span></td>
         <td class="oc">${nf(x.total)}</td>
-        <td class="bar">${cptBar(x.rows, maxToday)}</td>
+        <td class="bar od-go" onclick="ODR.goFloor('${x.f}')" title="${x.f} の明細を開く">${cptBar(x.rows, maxToday)}</td>
         <td>${x.hc}</td><td>${fmtLHval(x.lh)}</td>
         <td>${x.perH ? nf(x.perH) : "—"}</td>
         <td>${!x.total ? "—" : x.hc ? hrsTxt(x.hrs) + (x.hrs != null ? `<br><small style="color:var(--sub)">${endTxt(x.hrs)}</small>` : "") : `<b style="color:#b91c1c">配置なし</b>`}</td>
@@ -5562,7 +5577,7 @@ window.ODR = (function(){
       const zs = Object.entries(x.zones).sort((a, b) => b[1] - a[1]);
       const pp = {};
       x.rows.forEach(r => { const k = String(r[S.c.iPP] || "—"); pp[k] = (pp[k] || 0) + valOf(r, S.m); });
-      h += `<details${x.total ? "" : ""}><summary><span class="fl" style="background:hsl(${floorHue(x.f)},55%,42%);color:#fff;border-radius:6px;padding:1px 9px">${x.f}</span>
+      h += `<details id="od-det-${x.f}" data-f="${x.f}"${openDet.has(x.f) ? " open" : ""} ontoggle="ODR._tog(this)"><summary><span class="fl" style="background:hsl(${floorHue(x.f)},55%,42%);color:#fff;border-radius:6px;padding:1px 9px">${x.f}</span>
         ${Object.entries(pp).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `<span style="font-weight:600;color:var(--sub);font-size:12px">${esc(k)} ${nf(v)}</span>`).join("")}
         <span class="n">${nf(x.total)}・${x.rows.length}行</span></summary><div class="in">`;
       if (zs.length) h += `<div class="od-zones">${zs.map(([z, v]) => { const n = zoneHC(x.f, z); return `<span class="${n ? "" : "un"}">ロケ ${esc(z)}<b>${nf(v)}</b><em>${n ? n + "名" : "未配置"}</em></span>`; }).join("")}</div>`;
@@ -5570,13 +5585,15 @@ window.ODR = (function(){
       else {
         h += `<table class="od-t"><thead><tr><th>${esc(S.c.h[S.c.iPP] || "Process Path")}</th><th style="text-align:left">${esc(S.c.h[S.c.iPA] || "Pick Area")}</th>${S.c.nums.map(i => `<th>${esc(S.c.h[i]).replace(/\n/g, "<br>")}</th>`).join("")}</tr></thead><tbody>`;
         const sums = S.c.nums.map(() => 0);
-        x.rows.forEach(r => { h += `<tr><td>${esc(r[S.c.iPP])}</td><td style="text-align:left">${esc(r[S.c.iPA])}</td>${S.c.nums.map((i, k) => { sums[k] += num(r[i]); return `<td>${nf(num(r[i]))}</td>`; }).join("")}</tr>`; });
-        h += `<tr class="tot"><td>合計</td><td></td>${sums.map(v => `<td>${nf(v)}</td>`).join("")}</tr></tbody></table>`;
+        x.rows.forEach(r => { h += `<tr><td>${esc(r[S.c.iPP])}</td><td style="text-align:left">${esc(r[S.c.iPA])}</td>${S.c.nums.map((i, k) => { sums[k] += num(r[i]); const v = num(r[i]); return `<td>${v ? nf(v) : ""}</td>`; }).join("")}</tr>`; });
+        h += `<tr class="tot"><td>合計</td><td></td>${sums.map(v => `<td>${v ? nf(v) : ""}</td>`).join("")}</tr></tbody></table>`;
       }
       h += `</div></details>`;
     });
     h += `</div>`;
+    const st = body.scrollTop;
     body.innerHTML = h;
+    body.scrollTop = st;
   }
 
   /* ---------- 盤面への表示 ---------- */
@@ -5733,7 +5750,7 @@ window.ODR = (function(){
   setInterval(decorate, 60000);   // 「何分前」と古さの色を更新
   setTimeout(decorate, 300);
 
-  return {open, close, refresh, editCfg, setCol, decorate, _stats: stats, _set: d => { data = d; paintAll(); }};
+  return {open, close, refresh, editCfg, setCol, decorate, goFloor, _tog, _stats: stats, _set: d => { data = d; paintAll(); }};
 })();
 </script>
 
