@@ -5119,6 +5119,27 @@ function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || ""
 .multi-mode #ftabs .ftab.active{background:transparent !important;color:inherit !important}
 .multi-mode #ftabs .ftab.active .od-badge{background:#0f766e;color:#fff}
 .x-ftag{transition:filter .12s}.multi-mode .x-ftag:hover{filter:brightness(1.12)}
+/* 下の凡例（会社・工程の色）は出さない。代わりに CPT 別のオーダー数 */
+#legend{display:none !important}
+#odCpt{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;padding:6px 20px 4px}
+#odCpt:empty{display:none}
+#odCpt .cg{display:flex;align-items:stretch;gap:0;background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:10px;overflow:hidden;cursor:pointer}
+#odCpt .ct{display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:800;color:#fff;background:#0f766e;white-space:nowrap}
+#odCpt .cc{display:flex;flex-direction:column;justify-content:center;padding:3px 11px;border-left:1px solid var(--line,#e5e7eb);min-width:64px;text-align:right}
+#odCpt .cc i{font-style:normal;font-size:10.5px;color:#64748b;font-weight:700;white-space:nowrap;text-align:left}
+#odCpt .cc b{font-size:17px;font-weight:900;font-family:ui-monospace,Menlo,monospace;line-height:1.15;color:#0f172a}
+#odCpt .cc.next{background:#fff7ed}
+#odCpt .cc.next i{color:#c2410c}
+#odCpt .cc.next b{color:#c2410c}
+#odCpt .cc.late{background:#fef2f2}
+#odCpt .cc.late i,#odCpt .cc.late b{color:#dc2626}
+#odCpt .cc.zero b{color:#cbd5e1}
+#odCpt .cc.done{opacity:.55}
+.od-cpt-mini{display:inline-flex;flex-wrap:wrap;gap:3px;font-size:11px;font-weight:700;color:#475569}
+.od-cpt-mini span{border:1px solid #cbd5e1;border-radius:5px;padding:0 5px;background:#fff;white-space:nowrap}
+.od-cpt-mini span b{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#0f172a;margin-left:3px}
+.od-cpt-mini span.next{border-color:#fb923c;background:#fff7ed;color:#c2410c}.od-cpt-mini span.next b{color:#c2410c}
+.od-cpt-mini span.late{border-color:#fca5a5;background:#fef2f2;color:#dc2626}.od-cpt-mini span.late b{color:#dc2626}
 /* OUT と IN は同じ幅 */
 .x-single{grid-template-columns:minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.75fr) !important}
 .x-fl{grid-template-columns:54px minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.5fr) minmax(0,.55fr) !important}
@@ -5271,6 +5292,40 @@ window.ODR = (function(){
     return {key: "__sum", label: "数値列の合計", idx: c.nums};
   }
   const valOf = (r, m) => m.idx.reduce((s, i) => s + num(r[i]), 0);
+
+  /* ---------- CPT 別 ----------
+     見出し「1st CPT\n2026/11/20 11:30:00」→ 短い名前「1st 11:30」と時刻。Passed（過ぎたCPT）・Future はそのまま */
+  function cpts(){
+    const c = cols(), now = Date.now();
+    const list = c.nums.map(i => {
+      const h = String(c.h[i] || ""), m = h.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})/);
+      const t = m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime() : null;
+      const name = h.split(/\n/)[0].replace(/\s*CPT\s*/i, "").trim() || h;
+      return {i, h, t, label: /passed/i.test(h) ? "Passed" : /future/i.test(h) ? "Future" : (t ? `${name} ${pad(new Date(t).getHours())}:${pad(new Date(t).getMinutes())}` : name), passed: /passed/i.test(h) || (t != null && t < now), future: /future/i.test(h)};
+    });
+    const nx = list.filter(x => x.t && x.t >= now).sort((a, b) => a.t - b.t)[0];
+    list.forEach(x => x.next = !!(nx && x === nx));
+    return list;
+  }
+  const cptSum = (rows, i) => rows.reduce((s, r) => s + num(r[i]), 0);
+  const cptCls = (x, v) => (x.passed && v > 0 ? "late" : x.next ? "next" : "") + (v ? "" : " zero") + (x.passed && !v ? " done" : "");
+  const leftTxt = x => { if (!x.t) return ""; const m = Math.round((x.t - Date.now()) / 60000); return m >= 0 ? `あと${m >= 60 ? Math.floor(m / 60) + "時間" + (m % 60 ? (m % 60) + "分" : "") : m + "分"}` : ""; };
+  function cptMini(rows){
+    return `<span class="od-cpt-mini">${cpts().map(x => { const v = cptSum(rows, x.i); return `<span class="${cptCls(x, v)}" title="${esc(x.h.replace(/\n/g, " "))}${x.next ? "（次のCPT・" + leftTxt(x) + "）" : ""}">${esc(x.label)}<b>${nf(v)}</b></span>`; }).join("")}</span>`;
+  }
+  // 画面下（凡例のあった場所）：CPT 別の数。1フロア表示は「そのフロア」と「全体」、全フロア表示は「全体」
+  function paintCptBar(){
+    let el = document.getElementById("odCpt");
+    // 盤面の上（人数の行のすぐ下）に出す。盤面の高さは画面に合わせて自動で縮む
+    if (!el){ el = document.createElement("div"); el.id = "odCpt"; const st = document.getElementById("stats"); (st ? st.parentNode : document.body).insertBefore(el, st ? st.nextSibling : null); }
+    if (!data || (window.X_NEXT && X_NEXT.on)){ el.innerHTML = ""; return; }
+    const L = cpts(); if (!L.length){ el.innerHTML = ""; return; }
+    const grp = (title, rows, color) => `<div class="cg" onclick="ODR.open()" title="クリックで詳細"><div class="ct" style="background:${color}">${esc(title)}</div>${L.map(x => { const v = cptSum(rows, x.i); return `<div class="cc ${cptCls(x, v)}" title="${esc(x.h.replace(/\n/g, " "))}"><i>${esc(x.label)}${x.next ? " ・" + leftTxt(x) : ""}</i><b>${nf(v)}</b></div>`; }).join("")}</div>`;
+    let h = "";
+    if (viewMode !== "multi") h += grp(curFloor + " CPT別", rowsOf(curFloor), `hsl(${floorHue(curFloor)},55%,42%)`);
+    h += grp("全体 CPT別", allRows(), "#0f766e");
+    el.innerHTML = h;
+  }
   function allRows(){ if (!data || !data.floors) return []; return FLOORS.flatMap(f => (data.floors[f] && data.floors[f].rows) || []); }
   const rowsOf = f => (data && data.floors && data.floors[f] && data.floors[f].rows) || [];
 
@@ -5415,6 +5470,16 @@ window.ODR = (function(){
       ・未配置ロケ＝オーダーがあるのに、そのゾーンに誰も配置していないロケ（盤面にゾーン枠がない P なども含む）。<br>
       ・目安人数＝Pick の総人数をオーダー比で配分した人数。過不足が <span class="od-pm minus">マイナス</span> のフロアは人が足りず、<span class="od-pm plus">プラス</span> のフロアは余裕があります。</div>`;
 
+    // CPT 別 × フロア
+    { const L = cpts();
+      if (L.length){
+        h += `<div class="od-sec"><h3>CPT別のオーダー</h3><table class="od-t"><thead><tr><th>フロア</th>${L.map(x => `<th style="${x.next ? "color:#c2410c" : ""}">${esc(x.label)}${x.next ? "<br><small>" + leftTxt(x) + "</small>" : ""}</th>`).join("")}<th>合計</th></tr></thead><tbody>`;
+        S.fs.forEach(x => { h += `<tr><td><span class="fl" style="background:hsl(${floorHue(x.f)},55%,42%)">${x.f}</span></td>${L.map(c => { const v = cptSum(x.rows, c.i); return `<td style="${c.passed && v ? "color:#dc2626;font-weight:800" : c.next ? "color:#c2410c;font-weight:800" : ""}">${nf(v)}</td>`; }).join("")}<td><b>${nf(L.reduce((s, c) => s + cptSum(x.rows, c.i), 0))}</b></td></tr>`; });
+        const all = allRows();
+        h += `<tr class="tot"><td>合計</td>${L.map(c => `<td>${nf(cptSum(all, c.i))}</td>`).join("")}<td>${nf(L.reduce((s, c) => s + cptSum(all, c.i), 0))}</td></tr></tbody></table>
+          <div class="od-note">・Passed（CPTを過ぎた分）が残っているところは赤、次のCPTはオレンジで表示します。</div></div>`;
+      }
+    }
     // フロアごとの明細（Pickゾーン別・Process Path × Pick Area）
     h += `<div class="od-sec"><h3>フロア別の明細</h3>`;
     S.fs.forEach(x => {
@@ -5456,6 +5521,7 @@ window.ODR = (function(){
       headerBtn();
       document.querySelectorAll(".od-badge,.od-chip-row,.od-chip,.od-z,.od-ft").forEach(e => e.remove());
       document.querySelectorAll("#scroll .x-pz.od-unz,#scroll .x-pz.od-xhide").forEach(z => z.classList.remove("od-unz", "od-xhide"));
+      paintCptBar();
       if (!data || (window.X_NEXT && X_NEXT.on)) return;   // 翌日表示のときは盤面に出さない
       const S = stats(), st = isStale(), byF = {};
       S.fs.forEach(x => byF[x.f] = x);
@@ -5506,7 +5572,8 @@ window.ODR = (function(){
         const zl = z.querySelector(".zl"); if (!zl) return;
         const un = !hc;
         if (un) z.classList.add("od-unz");
-        const e = document.createElement("em"); e.className = "od-z" + (un ? " un" : ""); e.textContent = nf(v); e.title = `ロケ ${zn} のオーダー ${nf(v)}` + (un ? "（未配置）" : ""); zl.insertAdjacentElement("afterend", e);
+        const e = document.createElement("em"); e.className = "od-z" + (un ? " un" : ""); e.textContent = nf(v); const zr = x.rows.filter(r => zoneOf(r, S.c) === zn);
+        e.title = `ロケ ${zn} のオーダー ${nf(v)}` + (un ? "（未配置）" : "") + "\n" + cpts().map(c => `${c.label}：${nf(cptSum(zr, c.i))}`).join("\n"); zl.insertAdjacentElement("afterend", e);
       });
       // 全フロア表示：フロア名の下と Pick 枠
       document.querySelectorAll("#scroll section.x-fl").forEach(r => {
@@ -5578,7 +5645,7 @@ window.ODR = (function(){
   }
 
   const _render = render;
-  render = function(){ syncExtraZones(); const r = _render.apply(this, arguments); decorate(); floorNav(); return r; };
+  render = function(){ syncExtraZones(); try { paintCptBar(); } catch (e) {} const r = _render.apply(this, arguments); decorate(); floorNav(); return r; };
 
   // 起動：Firebase につながったら設定を読み、3分ごとに読み直す（画面が裏のときは休む）
   (function boot(n){
