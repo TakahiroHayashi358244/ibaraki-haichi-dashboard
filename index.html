@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.11";
+const APP_VERSION="2026.11.20.13";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5123,7 +5123,7 @@ function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || ""
 #legend{display:none !important}
 /* 人数・見込みTP の行（#stats）は折り畳み。開閉ボタンと CPT を1段に並べる */
 body.od-stats-closed #stats{display:none}
-#odBar{display:flex;align-items:center;gap:8px;padding:4px 20px 2px}
+#odBar{display:flex;align-items:center;gap:8px;padding:4px 20px 2px;flex-wrap:wrap}
 #odStatsBtn{flex:none;height:30px;padding:0 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;background:var(--panel,#fff);color:var(--sub,#64748b);font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;white-space:nowrap}
 #odStatsBtn:hover{color:var(--txt,#0f172a);border-color:#94a3b8}
 #odCpt{display:flex;width:fit-content;min-width:0;overflow-x:auto;align-items:stretch;gap:0;margin:0;background:var(--panel,#fff);border:1px solid var(--line,#e5e7eb);border-radius:8px;overflow:hidden;cursor:pointer;white-space:nowrap}
@@ -5143,6 +5143,10 @@ body.od-stats-closed #stats{display:none}
 #odCpt .cc.zero .v b{color:#cbd5e1}
 #odCpt .cc.done{opacity:.55}
 #odStatsBtn{align-self:stretch;height:auto !important}
+.x-nbar.od-in{margin:0 0 0 auto !important;padding:4px 10px !important;gap:8px !important;flex-wrap:nowrap !important;white-space:nowrap;font-size:12px !important;align-self:stretch;min-width:0}
+.x-nbar.od-in b{font-size:13px !important}
+.x-nbar.od-in button.pro{padding:4px 10px !important;font-size:12px !important}
+.x-nbar.od-in .sp{display:none}
 #odFut{flex:none;align-self:stretch;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;background:var(--panel,#fff);font-size:11.5px;font-weight:700;color:var(--txt,#0f172a);cursor:pointer;user-select:none;white-space:nowrap}
 #odFut input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#0f766e}
 #odFut.off{color:#64748b}
@@ -5336,13 +5340,18 @@ window.ODR = (function(){
      見出し「1st CPT\n2026/11/20 11:30:00」→ 短い名前「1st 11:30」と時刻。Passed（過ぎたCPT）・Future はそのまま */
   // シフト内の区切り：日勤＝その日の20:00まで、夜勤＝翌朝8:00まで（今のシフト表示に合わせる）
   //  C4 は時間がたつと 1st・2nd… がずれていくので、列の名前ではなく見出しのCPT時刻で分ける
+  //  区切りは表示している配置の日付（当日／翌日）に合わせる：その日付を D として
+  //    日勤＝D の 20:00 まで、夜勤＝D の朝 8:00 まで（D の夜勤は前日20:00〜D の8:00。例：20日夜〜21日朝は21日分の夜勤）
+  function planDate(){
+    const X = window.X_NEXT, s = X && (X.on ? X.nextDate && X.nextDate() : X.today && X.today());
+    const d = s ? new Date(s + "T00:00:00") : new Date(); d.setHours(0, 0, 0, 0); return d;
+  }
   function shiftCut(){
-    const now = new Date(), d = new Date(now);
-    if (curShift === "夜勤"){ d.setHours(8, 0, 0, 0); if (now.getHours() >= 8) d.setDate(d.getDate() + 1); }
-    else d.setHours(20, 0, 0, 0);
+    const d = planDate();
+    d.setHours(curShift === "夜勤" ? 8 : 20, 0, 0, 0);
     return d.getTime();
   }
-  const shiftCutTxt = () => curShift === "夜勤" ? "夜勤〜翌8:00" : "日勤〜20:00";
+  const shiftCutTxt = () => { const d = planDate(); return `${curShift === "夜勤" ? "夜勤" : "日勤"}〜${d.getMonth() + 1}/${d.getDate()} ${curShift === "夜勤" ? "8:00" : "20:00"}`; };
   function cpts(){
     const c = cols(), now = Date.now(), cut = shiftCut();
     const list = c.nums.map(i => {
@@ -5379,6 +5388,14 @@ window.ODR = (function(){
     return `<span class="od-cpt-mini">${cpts().map(x => { const v = cptSum(rows, x.i); return `<span class="${cptCls(x, v)}" title="${esc(x.h.replace(/\n/g, " "))}${x.next ? "（次のCPT・" + leftTxt(x) + "）" : ""}">${esc(x.label)}<b>${nf(v)}</b></span>`; }).join("")}</span>`;
   }
   // 画面下（凡例のあった場所）：CPT 別の数。1フロア表示は「そのフロア」と「全体」、全フロア表示は「全体」
+  function placeNextBar(){
+    const nb = document.getElementById("xNbar"), bar = document.getElementById("odBar");
+    if (!nb || !bar) return;
+    if (nb.parentNode !== bar){ bar.appendChild(nb); nb.classList.add("od-in"); }
+    // 長い説明は短くして、全文はマウスを乗せたときに出す
+    const sp = [...nb.querySelectorAll(":scope > span")].find(x => /作成中/.test(x.textContent) && !x.dataset.full);
+    if (sp){ sp.dataset.full = sp.textContent; nb.title = "翌日" + (document.getElementById("xNbTitle") || {}).textContent + sp.textContent; sp.textContent = "の配置を作成中（朝5:00に自動で当日へ反映）"; }
+  }
   function paintCptBar(){
     let el = document.getElementById("odCpt");
     // 盤面の上（人数の行のすぐ下）に「人数・見込みTP の開閉ボタン」と並べて出す。盤面の高さは画面に合わせて自動で縮む
@@ -5397,8 +5414,9 @@ window.ODR = (function(){
       bar.append(btn, el, fut);
       const st = document.getElementById("stats"); (st ? st.parentNode : document.body).insertBefore(bar, st ? st.nextSibling : null);
     }
+    placeNextBar();
     const futEl = document.getElementById("odFut");
-    if (!data || (window.X_NEXT && X_NEXT.on)){ el.innerHTML = ""; if (futEl) futEl.style.display = "none"; return; }
+    if (!data || !odShow()){ el.innerHTML = ""; if (futEl) futEl.style.display = "none"; return; }
     const L = cpts(); if (!L.length){ el.innerHTML = ""; if (futEl) futEl.style.display = "none"; return; }
     const M = metric();
     if (futEl){ futEl.style.display = ""; const on = M.key !== "__today"; futEl.querySelector("input").checked = on; futEl.classList.toggle("off", !on); }
@@ -5627,7 +5645,7 @@ window.ODR = (function(){
       document.querySelectorAll(".od-badge,.od-chip-row,.od-chip,.od-z,.od-ft").forEach(e => e.remove());
       document.querySelectorAll("#scroll .x-pz.od-unz,#scroll .x-pz.od-xhide").forEach(z => z.classList.remove("od-unz", "od-xhide"));
       paintCptBar();
-      if (!data || (window.X_NEXT && X_NEXT.on)) return;   // 翌日表示のときは盤面に出さない
+      if (!data || !odShow()) return;   // 翌日表示のときは盤面に出さない（夜勤＝翌日分の配置で動くので、夜勤のときは出す）
       const S = stats(), st = isStale(), byF = {};
       S.fs.forEach(x => byF[x.f] = x);
       document.querySelectorAll("#ftabs .ftab").forEach(t => {
@@ -5748,6 +5766,9 @@ window.ODR = (function(){
     if (!EXTRA.length && has) PICK_ZONE_LAYOUT.bottom.splice(PICK_ZONE_LAYOUT.bottom.indexOf(EXTRA_GROUP), 1);
     return true;
   }
+
+  // オーダーは当日表示・翌日表示のどちらでも出す
+  function odShow(){ return true; }
 
   const _render = render;
   render = function(){ syncExtraZones(); try { paintCptBar(); } catch (e) {} const r = _render.apply(this, arguments); decorate(); floorNav(); return r; };
