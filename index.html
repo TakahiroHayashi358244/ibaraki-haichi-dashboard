@@ -1114,7 +1114,7 @@ function toggleViewMode(){
   const btn=document.getElementById("viewToggle");
   if(btn){
     btn.classList.toggle("active",viewMode==="multi");
-    btn.textContent=viewMode==="multi"?"⏍ 単一":"⏍ 全フロア";
+    btn.textContent="⏍ 全フロア";btn.title=viewMode==="multi"?"全フロア表示中（押すと1フロア表示に戻る）":"全フロアを横並びで表示";
   }
   render();
   applyZoom();  // モード切替時にズーム再適用(multi=1倍固定、single=保存値復元)
@@ -2731,7 +2731,7 @@ window.addEventListener("DOMContentLoaded",()=>{
   if(viewMode==="multi"){
     document.body.classList.add("multi-mode");
     const btn=document.getElementById("viewToggle");
-    if(btn){btn.classList.add("active");btn.textContent="⏍ 単一"}
+    if(btn){btn.classList.add("active");btn.textContent="⏍ 全フロア";btn.title="全フロア表示中（押すと1フロア表示に戻る）"}
   }
   // 「最新版に更新」後の結果通知 ── 期待した版が読み込めたか検証
   const pending=localStorage.getItem("haichi3_pendingVer");
@@ -5106,6 +5106,491 @@ function X_histKey(p){ return String((p.shift || "") + "|" + String(p.name || ""
     if (n) setTimeout(() => { try { render(); } catch (e) {} }, 800);
   }
   setTimeout(run, 4000);
+})();
+</script>
+
+<!-- ===== 階層別オーダー（C4）===== -->
+<style>
+/* ---------- 階層別オーダー（C4） ---------- */
+/* ---------- OUTBOUND を広く（オーダー表示とPickゾーンが収まるように） ---------- */
+.multi-mode #ftabs{opacity:1 !important;pointer-events:auto !important}
+.multi-mode #ftabs .ftab{cursor:pointer}
+/* 全フロア表示中は、どのフロアも選んでいない見た目にする */
+.multi-mode #ftabs .ftab.active{background:transparent !important;color:inherit !important}
+.multi-mode #ftabs .ftab.active .od-badge{background:#0f766e;color:#fff}
+.x-ftag{transition:filter .12s}.multi-mode .x-ftag:hover{filter:brightness(1.12)}
+/* OUT と IN は同じ幅 */
+.x-single{grid-template-columns:minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.75fr) !important}
+.x-fl{grid-template-columns:54px minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.5fr) minmax(0,.55fr) !important}
+/* Pickのロケ（ゾーン）は縦並びのまま固定。
+   LH・UPH は他の工程枠と同じく右上：1行目＝ロケ名（左）と LH・UPH（右）、2行目＝カード（全幅） */
+.x-pz{flex-wrap:wrap;row-gap:4px}
+.x-pz .zl{order:0}
+.x-pz .x-cap{order:1;margin-left:auto;align-self:center !important;white-space:nowrap}
+.x-pz .x-chips{order:2;flex:1 1 100%}
+.x-pz.emp0 .x-chips:empty{display:none}
+
+.btn.order{background:#0f766e;color:#fff;border-color:#0f766e;font-weight:800;display:inline-flex;align-items:center;gap:6px}
+.btn.order:hover{background:#115e59;border-color:#115e59;color:#fff}
+.btn.order .ob{background:rgba(255,255,255,.22);border-radius:6px;padding:0 6px;font-family:ui-monospace,Menlo,monospace;font-size:11px}
+.btn.order.stale{background:#9ca3af;border-color:#9ca3af}
+.ftab .od-badge{display:inline-block;margin-left:4px;padding:0 5px;border-radius:5px;background:#0f766e;color:#fff;font-size:12px;letter-spacing:-.3px;font-weight:800;font-family:ui-monospace,Menlo,monospace;vertical-align:0}
+.ftab.active .od-badge{background:#fff;color:#0f766e}
+.od-chip-row{margin:4px 0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.od-chip-row .od-chip{margin-left:0}
+.od-chip{display:inline-flex;align-items:baseline;gap:5px;margin-left:6px;padding:3px 10px;border-radius:8px;background:#0f766e;color:#fff;font-size:11.5px;font-weight:700;white-space:nowrap;cursor:pointer;line-height:1.2}
+.od-chip .ol{font-size:11px;opacity:.9}
+.od-chip .on{font-size:17px;font-weight:900;font-family:ui-monospace,Menlo,monospace;letter-spacing:-.3px}
+.od-chip .os{font-size:11px;opacity:.95;margin-left:4px;padding-left:7px;border-left:1px solid rgba(255,255,255,.4)}
+.od-chip .os b{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+.od-chip.sm{padding:2px 8px}
+.od-chip.sm .on{font-size:14.5px}
+.od-chip.warn{background:#dc2626}
+.od-chip.stale{background:#9ca3af}
+.x-pz > .od-z{order:0;align-self:center;display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;background:#0f766e;color:#fff;font-style:normal;font-size:12px;font-weight:800;font-family:ui-monospace,Menlo,monospace}
+.x-pz > .od-z.un{background:#dc2626}
+.x-pz.od-unz{background:#fef2f2 !important;border:1.5px solid #dc2626 !important;opacity:1 !important}
+.x-pz.od-xhide{display:none !important}
+.od-unrow{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:11.5px;font-weight:800;color:#b91c1c;cursor:pointer}
+.od-un{display:inline-flex;align-items:baseline;gap:4px;background:#fff;color:#b91c1c;border:1.5px solid #dc2626;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:800;white-space:nowrap}
+.od-un b{font-family:ui-monospace,Menlo,monospace;font-size:14px}
+.od-zones span.un{background:#fee2e2;border-color:#fecaca;color:#b91c1c}
+.od-zones span.un em{color:#b91c1c;font-weight:800}
+
+.x-ftag .od-ft{display:block;margin-top:5px;background:#fff;color:#0f766e;border-radius:6px;padding:2px 2px 3px;cursor:pointer;line-height:1.1}
+.x-ftag .od-ft i{display:block;font-style:normal;font-size:9px;font-weight:700;color:#475569}
+.x-ftag .od-ft b{display:block;font-size:14px;font-weight:900;font-family:ui-monospace,Menlo,monospace;letter-spacing:-.4px}
+.x-ftag .od-ft.warn{color:#dc2626}
+#orderModal .modal{max-width:1180px}
+.od-top{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;font-size:12px;color:var(--sub)}
+.od-top .st{font-weight:800}
+.od-top .st.ok{color:#0f766e}.od-top .st.ng{color:#b91c1c}
+.od-top select{font-family:inherit;font-size:12px;padding:4px 8px;border-radius:7px;border:1px solid var(--line);background:var(--panel)}
+.od-top .sp{flex:1}
+.od-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:16px}
+.od-kpi{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.od-kpi .l{font-size:11px;color:var(--sub);font-weight:700}
+.od-kpi .v{font-size:24px;font-weight:800;font-family:ui-monospace,Menlo,monospace;margin-top:2px}
+.od-kpi .v small{font-size:12px;color:var(--sub);margin-left:4px;font-family:inherit}
+.od-kpi .s{font-size:11px;color:var(--sub);margin-top:2px}
+table.od-t{width:100%;border-collapse:collapse;font-size:12.5px}
+table.od-t th{background:var(--panel2);color:var(--sub);font-weight:800;font-size:11px;text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.od-t th:first-child,table.od-t td:first-child{text-align:left}
+table.od-t td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:ui-monospace,Menlo,monospace;white-space:nowrap}
+table.od-t tr.tot td{font-weight:800;background:#fffbea}
+table.od-t td.oc{font-size:17px;font-weight:900;color:#0f766e}
+table.od-t td .fl{display:inline-block;color:#fff;font-weight:800;border-radius:6px;padding:1px 9px;font-family:inherit}
+table.od-t td.bar{width:24%;min-width:140px}
+.od-bar{position:relative;height:16px;background:var(--panel2);border-radius:5px;overflow:hidden}
+.od-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px}
+.od-bar span{position:absolute;right:6px;top:0;font-size:10.5px;line-height:16px;color:var(--txt);font-weight:700}
+.od-pm{font-weight:800}.od-pm.plus{color:#2563eb}.od-pm.minus{color:#dc2626}
+.od-note{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.6}
+.od-sec{margin-top:20px}
+.od-sec h3{font-size:14px;font-weight:800;margin-bottom:8px}
+.od-sec details{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:var(--panel)}
+.od-sec summary{cursor:pointer;padding:8px 12px;font-weight:800;font-size:13px;display:flex;align-items:center;gap:10px}
+.od-sec summary .n{margin-left:auto;font-family:ui-monospace,Menlo,monospace;color:var(--sub);font-size:12px}
+.od-sec details .in{padding:0 12px 10px;overflow:auto}
+.od-zones{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px}
+.od-zones span{border:1px solid var(--line);border-radius:7px;padding:3px 8px;font-size:11.5px;background:var(--panel2)}
+.od-zones span b{font-family:ui-monospace,Menlo,monospace;margin-left:4px}
+.od-zones span em{font-style:normal;color:var(--sub);margin-left:4px}
+.od-empty{padding:30px;text-align:center;color:var(--sub);font-size:13px;line-height:1.8}
+</style>
+
+<div class="modal-bg" id="orderModal" onclick="if(event.target===this)ODR.close()">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>階層別オーダー（C4）</h2>
+      <div class="modal-head-actions">
+        <button class="btn refresh-btn" onclick="ODR.refresh(true)" title="スプレッドシートから読み直す"><span class="rf-icon">↻</span> 更新</button>
+        <button class="btn" style="opacity:.6" onclick="ODR.editCfg()" title="予備：スプレッドシート（GAS）から読むときの設定。通常は不要">予備の読み込み先</button>
+        <button class="modal-x" onclick="ODR.close()">×</button>
+      </div>
+    </div>
+    <div class="modal-body" id="orderBody"></div>
+  </div>
+</div>
+
+<script>
+/* =================================================================
+   階層別オーダー（C4/HFO → スプレッドシート → 配置ダッシュボード）
+   ・Tampermonkey が3分ごとに C4 の表をスプレッドシート（2F〜6F・全体）へ送る
+   ・スプレッドシートの GAS（doGet）を3分ごとに読んで、ここに表示する
+   ・配置との連携：フロアごとの Pick 配置（人数・LH・過去30日UPHの処理能力）と並べて
+       消化見込み（オーダー ÷ 処理能力/h）と、オーダー比で配分したときの目安人数・過不足を出す
+     盤面にも、フロアタブ・Pick枠・Pickゾーンにオーダー数を表示（翌日表示のときは出さない）
+   ・設定（全PC共通・Firebase）：orderFeed {url, key, col}
+       url＝GASのWebアプリURL　key＝GASの READ_KEY　col＝数える列（見出し名。"__sum"＝数値列の合計）
+   ================================================================= */
+window.ODR = (function(){
+  const POLL_MS = 3 * 60000, STALE_MIN = 10, LS_KEY = "haichi_order_cache";
+  const FLOORS = ["6F", "5F", "4F", "3F", "2F"];
+  let cfg = null, data = null, err = "", loading = false, lastFetch = 0;
+  try { const c = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (c && c.data) data = c.data; } catch (e) {}
+
+  const raw = () => window.X_NEXT && X_NEXT.raw;
+  const pad = n => String(n).padStart(2, "0");
+  const hm = t => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, m => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+  const nf = n => Math.round(n).toLocaleString("ja-JP");
+  const num = v => { if (typeof v === "number") return isFinite(v) ? v : 0; const x = parseFloat(String(v == null ? "" : v).replace(/[,\s，]/g, "")); return isFinite(x) ? x : 0; };
+  const isNumLike = v => typeof v === "number" || /^\s*-?[\d,，]+(\.\d+)?\s*$/.test(String(v == null ? "" : v));
+
+  async function loadCfg(){
+    if (!raw()) return cfg || {};
+    try { cfg = (await raw().get(raw().rRef("orderFeed"))).val() || {}; } catch (e) { cfg = cfg || {}; }
+    return cfg;
+  }
+  async function saveCfg(patch){
+    cfg = Object.assign({}, cfg || {}, patch, {at: Date.now()});
+    if (raw()) await raw().set(raw().rRef("orderFeed"), cfg);
+  }
+
+  /* ---------- 列の判定 ---------- */
+  function cols(){
+    const h = (data && data.header) || [];
+    const iPP = h.findIndex(x => /process\s*path/i.test(x)), iPA = h.findIndex(x => /pick\s*area/i.test(x));
+    const rows = allRows();
+    const nums = [];
+    h.forEach((name, i) => {
+      if (i === iPP || i === iPA || !String(name).trim()) return;
+      const vs = rows.map(r => r[i]).filter(v => String(v == null ? "" : v).trim() !== "");
+      if (!vs.length || vs.filter(isNumLike).length / vs.length >= 0.8) nums.push(i);
+    });
+    return {h, iPP: iPP < 0 ? 0 : iPP, iPA: iPA < 0 ? 1 : iPA, nums};
+  }
+  function metric(){
+    const c = cols(), want = cfg && cfg.col;
+    if (want === "__sum") return {key: "__sum", label: "数値列の合計", idx: c.nums};
+    if (want === "__today") return {key: "__today", label: "当日CPT分（Future CPT以外）", idx: c.nums.filter(i => !/future/i.test(c.h[i]))};
+    if (want){ const i = c.h.indexOf(want); if (i >= 0 && c.nums.includes(i)) return {key: want, label: want, idx: [i]}; }
+    const t = c.nums.find(i => /total|合計|sum/i.test(c.h[i]));
+    if (t != null) return {key: c.h[t], label: c.h[t], idx: [t]};
+    return {key: "__sum", label: "数値列の合計", idx: c.nums};
+  }
+  const valOf = (r, m) => m.idx.reduce((s, i) => s + num(r[i]), 0);
+  function allRows(){ if (!data || !data.floors) return []; return FLOORS.flatMap(f => (data.floors[f] && data.floors[f].rows) || []); }
+  const rowsOf = f => (data && data.floors && data.floors[f] && data.floors[f].rows) || [];
+
+  // Pick Area（p2-R… など）からゾーン名を拾う。配置のPickゾーン（R・Q・N…）にあるものだけ
+  //  盤面にゾーン枠がない文字（P など）もロケとして数える
+  function zoneOf(r, c){
+    const cand = [r[c.iPA], ...r].map(v => String(v == null ? "" : v));
+    for (const s of cand){ const m = s.match(/p\d+\s*-\s*([A-Za-z])/); if (m) return m[1].toUpperCase(); }
+    return "";
+  }
+  const layoutZones = () => typeof pickZoneNames === "function" ? pickZoneNames() : [];
+  const zoneHC = (f, z) => (DB.people || []).filter(p => p.shift === curShift && !p.admin && floorOf(p) === f && locOf(p) === "OUT|" + PICK_ZONE_LAYOUT.secName + "|" + z).length;
+
+  /* ---------- 集計 ---------- */
+  function floorStat(f, m, c){
+    const rows = rowsOf(f);
+    const total = rows.reduce((s, r) => s + valOf(r, m), 0);
+    const zones = {};
+    rows.forEach(r => { const z = zoneOf(r, c); if (z) zones[z] = (zones[z] || 0) + valOf(r, m); });
+    // 配置：今のシフトでこのフロアの OUT の Pick 工程にいる人（管理者・待機・欠勤・休日は除く）
+    const ps = (DB.people || []).filter(p => p.shift === curShift && !p.admin && floorOf(p) === f
+      && !(typeof X_isSide === "function" && X_isSide(locOf(p))) && String(locOf(p)).split("|")[0] === "OUT" && locCat(p) === "Pick");
+    const cap = (typeof uphFallback !== "undefined" && uphFallback.Pick != null) ? capOf(ps, "Pick") : null;
+    const perH = cap && cap.perH > 0 ? cap.perH : null;
+    const unplaced = Object.entries(zones).filter(([z, v]) => v > 0 && !zoneHC(f, z)).sort((a, b) => b[1] - a[1]);
+    const unplacedSum = unplaced.reduce((s, [, v]) => s + v, 0);
+    return {f, rows, total, zones, unplaced, unplacedSum, hc: ps.length, lh: lhOf(ps), perH, hrs: perH ? total / perH : null, at: data && data.floors && data.floors[f] && data.floors[f].at};
+  }
+  function stats(){
+    const c = cols(), m = metric();
+    const fs = FLOORS.map(f => floorStat(f, m, c));
+    const total = fs.reduce((s, x) => s + x.total, 0), hc = fs.reduce((s, x) => s + x.hc, 0), lh = fs.reduce((s, x) => s + x.lh, 0);
+    const perH = fs.reduce((s, x) => s + (x.perH || 0), 0) || null;
+    fs.forEach(x => { x.share = total > 0 ? x.total / total : 0; x.target = hc * x.share; x.diff = x.hc - x.target; });
+    const worst = fs.filter(x => x.total > 0 && x.hrs != null).sort((a, b) => b.hrs - a.hrs)[0] || null;
+    const noPick = fs.filter(x => x.total > 0 && !x.hc).map(x => x.f);
+    return {c, m, fs, total, hc, lh, perH, hrs: perH ? total / perH : null, worst, noPick};
+  }
+  const ageMin = () => data && data.at ? (Date.now() - data.at) / 60000 : null;
+  const isStale = () => { const a = ageMin(); return a == null || a > STALE_MIN; };
+  const hrsTxt = h => h == null ? "—" : h < 0.05 ? "0.0h" : h.toFixed(1) + "h";
+  const endTxt = h => h == null ? "" : hm(Date.now() + h * 3600000);
+
+  /* ---------- 読み込み ---------- */
+  // C4（Tampermonkey）が Firebase の orderData に書いたものをそのまま受け取る（主な経路・すぐ反映）
+  const asRows = v => Array.isArray(v) ? v.map(r => Array.isArray(r) ? r : Object.values(r || {})) : Object.values(v || {}).map(r => Array.isArray(r) ? r : Object.values(r || {}));
+  function normalize(v){
+    if (!v || !v.floors) return null;
+    const o = {ok: true, at: v.at || null, header: Array.isArray(v.header) ? v.header : Object.values(v.header || {}), floors: {}, sender: v.sender || null};
+    FLOORS.forEach(f => { const x = v.floors[f] || {}; o.floors[f] = {at: x.at || v.at || null, rows: asRows(x.rows)}; });
+    return o;
+  }
+  function watchFirebase(){
+    if (!raw() || !raw().onValue) return;
+    raw().onValue(raw().rRef("orderData"), snap => {
+      const d = normalize(snap.val()); if (!d) return;
+      if (data && data.at && d.at && d.at < data.at) return;   // 古いものは使わない
+      data = d; err = "";
+      try { localStorage.setItem(LS_KEY, JSON.stringify({data: d, saved: Date.now()})); } catch (e) {}
+      paintAll();
+    });
+  }
+
+  // 予備：GAS（スプレッドシート）から読む。読み込み先を設定したときだけ
+  async function refresh(force){
+    if (loading) return;
+    const c = cfg || await loadCfg();
+    if (!c.url){ paintAll(); return; }
+    if (!force && Date.now() - lastFetch < 60000) return;
+    loading = true; lastFetch = Date.now();
+    try {
+      const u = `${c.url}${c.url.includes("?") ? "&" : "?"}key=${encodeURIComponent(c.key || "")}&t=${Date.now()}`;
+      const j = await (await fetch(u, {cache: "no-store"})).json();
+      if (!j.ok) throw new Error(j.error || "読み込めませんでした");
+      if (!(data && data.at && j.at && j.at < data.at)){ data = j; err = ""; }
+      try { localStorage.setItem(LS_KEY, JSON.stringify({data: j, saved: Date.now()})); } catch (e) {}
+    } catch (e) { err = "読み込みエラー：" + (e.message || e); }
+    loading = false;
+    paintAll();
+  }
+  async function editCfg(){
+    if (!raw()){ alert("まだ接続中です。少し待ってからもう一度押してください"); return; }
+    const c = await loadCfg();
+    const url = prompt("オーダー集計スプレッドシートのWebアプリのURL（GASでデプロイしたURL。Tampermonkey の GAS_URL と同じ）", c.url || ""); if (url === null) return;
+    const key = prompt("鍵（GASのコードの READ_KEY と同じ文字列）", c.key || "hfo1order"); if (key === null) return;
+    await saveCfg({url: url.trim(), key: key.trim()});
+    alert("保存しました（全PC共通）");
+    refresh(true);
+  }
+  async function setCol(v){ await saveCfg({col: v}); paintAll(); }
+
+  /* ---------- 画面 ---------- */
+  function open(){ document.getElementById("orderModal").classList.add("open"); paintModal(); refresh(true); }
+  function close(){ document.getElementById("orderModal").classList.remove("open"); }
+
+  function paintModal(){
+    const body = document.getElementById("orderBody");
+    if (!body || !document.getElementById("orderModal").classList.contains("open")) return;
+    if (!data){
+      body.innerHTML = `<div class="od-empty">${esc(err || (loading ? "読み込み中…" : "まだデータがありません"))}<br>C4の画面（Tampermonkey v2.5）からの送信を待っています。</div>`;
+      return;
+    }
+    const S = stats(), a = ageMin();
+    const stTxt = a == null ? "更新時刻不明" : `最終更新 ${hm(data.at)}（${Math.round(a)}分前）`;
+    const opt = [`<option value="__sum"${S.m.key === "__sum" ? " selected" : ""}>数値列の合計</option>`, `<option value="__today"${S.m.key === "__today" ? " selected" : ""}>当日CPT分（Future CPT以外）</option>`]
+      .concat(S.c.nums.map(i => `<option value="${esc(S.c.h[i])}"${S.m.key === S.c.h[i] ? " selected" : ""}>${esc(String(S.c.h[i]).replace(/\s*\n\s*/g, " "))}</option>`)).join("");
+    const maxT = Math.max(1, ...S.fs.map(x => x.total));
+    const hasUph = S.fs.some(x => x.perH);
+    let h = `<div class="od-top">
+      <span class="st ${isStale() ? "ng" : "ok"}">${esc(stTxt)}${isStale() ? "　更新が止まっています（C4画面のTampermonkeyを確認）" : ""}</span>
+      ${err ? `<span class="st ng">${esc(err)}</span>` : ""}
+      ${data.sender && data.sender.name ? `<span>送信端末：<b>${esc(data.sender.name)}</b></span>` : ""}
+      <span class="sp"></span>
+      <label>数える列 <select onchange="ODR.setCol(this.value)">${opt}</select></label>
+      <span>配置は <b>${esc(curShift)}</b> で計算</span>
+    </div>`;
+    h += `<div class="od-kpis">
+      <div class="od-kpi"><div class="l">全体オーダー（${esc(S.m.label)}）</div><div class="v">${nf(S.total)}</div></div>
+      <div class="od-kpi"><div class="l">Pick 配置</div><div class="v">${S.hc}<small>名</small></div><div class="s">LH ${fmtLHval(S.lh)}h</div></div>
+      <div class="od-kpi"><div class="l">Pick 処理能力</div><div class="v">${S.perH ? nf(S.perH) : "—"}<small>/h</small></div><div class="s">過去30日UPHの合計</div></div>
+      <div class="od-kpi"><div class="l">いちばん時間がかかるフロア</div><div class="v">${S.worst ? S.worst.f + " " + hrsTxt(S.worst.hrs) : "—"}</div><div class="s">${S.noPick.length ? `<b style="color:#b91c1c">Pick配置なし：${S.noPick.join("・")}</b>` : S.worst ? endTxt(S.worst.hrs) + " ごろ消化（全体を均した場合 " + hrsTxt(S.hrs) + "）" : "Pick配置・UPHがあると計算"}</div></div>
+    </div>`;
+    h += `<table class="od-t"><thead><tr><th>フロア</th><th>オーダー</th><th>構成比</th><th>Pick 人数</th><th>Pick LH</th><th>処理能力/h</th><th>消化見込み</th><th>1人あたり</th><th>目安人数</th><th>過不足</th><th style="text-align:left">未配置ロケ</th></tr></thead><tbody>`;
+    S.fs.forEach(x => {
+      const col = `hsl(${floorHue(x.f)},55%,42%)`;
+      const pm = Math.round(x.diff * 10) / 10;
+      h += `<tr><td><span class="fl" style="background:${col}">${x.f}</span></td>
+        <td class="oc">${nf(x.total)}</td>
+        <td class="bar"><div class="od-bar"><i style="width:${(x.total / maxT * 100).toFixed(1)}%;background:${col};opacity:.75"></i><span>${(x.share * 100).toFixed(1)}%</span></div></td>
+        <td>${x.hc}</td><td>${fmtLHval(x.lh)}</td>
+        <td>${x.perH ? nf(x.perH) : "—"}</td>
+        <td>${!x.total ? "—" : x.hc ? hrsTxt(x.hrs) + (x.hrs != null ? `<br><small style="color:var(--sub)">${endTxt(x.hrs)}</small>` : "") : `<b style="color:#b91c1c">配置なし</b>`}</td>
+        <td>${x.hc ? nf(x.total / x.hc) : "—"}</td>
+        <td>${S.hc ? (Math.round(x.target * 10) / 10).toFixed(1) : "—"}</td>
+        <td>${S.hc && S.total ? `<span class="od-pm ${pm > 0.4 ? "plus" : pm < -0.4 ? "minus" : ""}">${pm > 0 ? "+" : ""}${pm.toFixed(1)}</span>` : "—"}</td>
+        <td style="text-align:left;white-space:normal">${x.unplaced.length ? x.unplaced.map(([z, v]) => `<span class="od-un">${esc(z)} <b>${nf(v)}</b></span>`).join("") : '<span style="color:var(--sub)">なし</span>'}</td></tr>`;
+    });
+    h += `<tr class="tot"><td>合計</td><td>${nf(S.total)}</td><td></td><td>${S.hc}</td><td>${fmtLHval(S.lh)}</td><td>${S.perH ? nf(S.perH) : "—"}</td><td>${hrsTxt(S.hrs)}</td><td>${S.hc ? nf(S.total / S.hc) : "—"}</td><td>${S.hc}</td><td></td><td style="text-align:left">${(u => u ? nf(u) : "")(S.fs.reduce((s, x) => s + x.unplacedSum, 0))}</td></tr>`;
+    h += `</tbody></table>
+      <div class="od-note">・Pick 人数／LH は、今の配置で各フロアの OUTBOUND「Pick」工程（ゾーン含む）にいる人です（管理者・待機・欠勤・休日は除く）。<br>
+      ・処理能力/h は、その人たちの過去30日 Pick UPH の合計（実績がない人は Pick の全体平均）。消化見込み＝オーダー ÷ 処理能力/h（数える列がユニット数のときの目安）。${hasUph ? "" : "<b>UPHがまだ読み込まれていないため計算できません。</b>"}<br>
+      ・未配置ロケ＝オーダーがあるのに、そのゾーンに誰も配置していないロケ（盤面にゾーン枠がない P なども含む）。<br>
+      ・目安人数＝Pick の総人数をオーダー比で配分した人数。過不足が <span class="od-pm minus">マイナス</span> のフロアは人が足りず、<span class="od-pm plus">プラス</span> のフロアは余裕があります。</div>`;
+
+    // フロアごとの明細（Pickゾーン別・Process Path × Pick Area）
+    h += `<div class="od-sec"><h3>フロア別の明細</h3>`;
+    S.fs.forEach(x => {
+      const zs = Object.entries(x.zones).sort((a, b) => b[1] - a[1]);
+      const pp = {};
+      x.rows.forEach(r => { const k = String(r[S.c.iPP] || "—"); pp[k] = (pp[k] || 0) + valOf(r, S.m); });
+      h += `<details${x.total ? "" : ""}><summary><span class="fl" style="background:hsl(${floorHue(x.f)},55%,42%);color:#fff;border-radius:6px;padding:1px 9px">${x.f}</span>
+        ${Object.entries(pp).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `<span style="font-weight:600;color:var(--sub);font-size:12px">${esc(k)} ${nf(v)}</span>`).join("")}
+        <span class="n">${nf(x.total)}・${x.rows.length}行</span></summary><div class="in">`;
+      if (zs.length) h += `<div class="od-zones">${zs.map(([z, v]) => { const n = zoneHC(x.f, z); return `<span class="${n ? "" : "un"}">ロケ ${esc(z)}<b>${nf(v)}</b><em>${n ? n + "名" : "未配置"}</em></span>`; }).join("")}</div>`;
+      if (!x.rows.length) h += `<div class="od-note">データなし</div>`;
+      else {
+        h += `<table class="od-t"><thead><tr><th>${esc(S.c.h[S.c.iPP] || "Process Path")}</th><th style="text-align:left">${esc(S.c.h[S.c.iPA] || "Pick Area")}</th>${S.c.nums.map(i => `<th>${esc(S.c.h[i]).replace(/\n/g, "<br>")}</th>`).join("")}</tr></thead><tbody>`;
+        const sums = S.c.nums.map(() => 0);
+        x.rows.forEach(r => { h += `<tr><td>${esc(r[S.c.iPP])}</td><td style="text-align:left">${esc(r[S.c.iPA])}</td>${S.c.nums.map((i, k) => { sums[k] += num(r[i]); return `<td>${nf(num(r[i]))}</td>`; }).join("")}</tr>`; });
+        h += `<tr class="tot"><td>合計</td><td></td>${sums.map(v => `<td>${nf(v)}</td>`).join("")}</tr></tbody></table>`;
+      }
+      h += `</div></details>`;
+    });
+    h += `</div>`;
+    body.innerHTML = h;
+  }
+
+  /* ---------- 盤面への表示 ---------- */
+  function headerBtn(){
+    let b = document.getElementById("orderBtn");
+    if (!b){
+      const s = document.querySelector("header .btn.summary"); if (!s) return;
+      b = document.createElement("button"); b.id = "orderBtn"; b.className = "btn order"; b.type = "button";
+      b.title = "階層別オーダー（C4）"; b.onclick = open;
+      s.insertAdjacentElement("afterend", b);
+    }
+    const S = data ? stats() : null;
+    b.classList.toggle("stale", !data || isStale());
+    b.innerHTML = `オーダー${S ? `<span class="ob">${nf(S.total)}</span>` : ""}`;
+  }
+  function decorate(){
+    try {
+      headerBtn();
+      document.querySelectorAll(".od-badge,.od-chip-row,.od-chip,.od-z,.od-ft").forEach(e => e.remove());
+      document.querySelectorAll("#scroll .x-pz.od-unz,#scroll .x-pz.od-xhide").forEach(z => z.classList.remove("od-unz", "od-xhide"));
+      if (!data || (window.X_NEXT && X_NEXT.on)) return;   // 翌日表示のときは盤面に出さない
+      const S = stats(), st = isStale(), byF = {};
+      S.fs.forEach(x => byF[x.f] = x);
+      document.querySelectorAll("#ftabs .ftab").forEach(t => {
+        const x = byF[t.textContent.trim()]; if (!x) return;
+        const s = document.createElement("span"); s.className = "od-badge"; s.textContent = nf(x.total); s.title = `オーダー ${nf(x.total)}`; t.appendChild(s);
+      });
+      const chip = (x, short) => {
+        const e = document.createElement("span");
+        const warn = x.total > 0 && (!x.hc || (S.hc && x.diff < -0.6));
+        e.className = "od-chip" + (short ? " sm" : "") + (st ? " stale" : warn ? " warn" : "");
+        e.innerHTML = short ? `<span class="ol">オーダー</span><span class="on">${nf(x.total)}</span>`
+          : `<span class="ol">オーダー</span><span class="on">${nf(x.total)}</span>` + ((x.hrs != null || (S.hc && S.total)) ? `<span class="os">${x.hrs != null ? `消化 <b>${hrsTxt(x.hrs)}</b>` : ""}${x.hrs != null && S.hc && S.total ? "　" : ""}${S.hc && S.total ? `目安 <b>${x.target.toFixed(1)}</b>名` : ""}</span>` : "");
+        e.title = `${x.f} オーダー ${nf(x.total)}（${S.m.label}）\nPick ${x.hc}名・LH ${fmtLHval(x.lh)}・処理能力 ${x.perH ? nf(x.perH) + "/h" : "—"}\n消化見込み ${hrsTxt(x.hrs)}${x.hrs != null ? "（" + endTxt(x.hrs) + "ごろ）" : ""}\n目安人数 ${x.target.toFixed(1)}名（過不足 ${x.diff > 0 ? "+" : ""}${x.diff.toFixed(1)}）` + (st ? "\n※データの更新が止まっています" : "") + "\nクリックで詳細";
+        e.onclick = ev => { ev.stopPropagation(); open(); };
+        e.addEventListener("pointerdown", ev => ev.stopPropagation());
+        return e;
+      };
+      // 未配置ロケ（オーダーがあるのにゾーンに誰もいない）
+      const unRow = (x, short) => {
+        const e = document.createElement("span"); e.className = "od-unrow";
+        e.innerHTML = (short ? "未配置 " : "未配置ロケ ") + x.unplaced.map(([z, v]) => `<span class="od-un">${esc(z)} <b>${nf(v)}</b></span>`).join("");
+        e.title = "オーダーがあるのに、そのゾーンに誰も配置していないロケ\n" + x.unplaced.map(([z, v]) => `${z}：${nf(v)}`).join("\n") + `\n合計 ${nf(x.unplacedSum)}` + "\nクリックで詳細";
+        e.onclick = ev => { ev.stopPropagation(); open(); };
+        e.addEventListener("pointerdown", ev => ev.stopPropagation());
+        return e;
+      };
+      const base = "OUT|" + PICK_ZONE_LAYOUT.secName;
+      // 1フロア表示：Pick枠の見出し＋ゾーン
+      document.querySelectorAll(`#scroll .x-sbox[data-loc="${base}"]`).forEach(b => {
+        const x = byF[b.dataset.floor]; if (!x) return;
+        const hd = b.querySelector(".x-bh"); if (!hd) return;
+        const row = document.createElement("div"); row.className = "od-chip-row"; const c1 = chip(x, false); c1.style.marginLeft = "0"; row.appendChild(c1);
+        hd.insertAdjacentElement("afterend", row);
+      });
+      // 1フロア表示で Pick 枠がない（Pickに誰もいない）ときは OUTBOUND の見出しの下に出す
+      if (viewMode !== "multi" && !document.querySelector(`#scroll .x-sbox[data-loc="${base}"]`)){
+        const x = byF[curFloor], sh = document.querySelector("#scroll .x-sarea.OUT .x-sh");
+        if (x && x.total && sh){ const row = document.createElement("div"); row.className = "od-chip-row"; row.appendChild(chip(x, false)); sh.insertAdjacentElement("afterend", row); }
+      }
+      document.querySelectorAll(`#scroll .x-pz[data-loc^="${base}|"]`).forEach(z => {
+        z.classList.remove("od-unz", "od-xhide");
+        const x = byF[z.dataset.floor], zn = z.dataset.loc.split("|")[2];
+        const v = x ? x.zones[zn] : 0, hc = zoneHC(z.dataset.floor, zn);
+        // C4から追加したロケは、そのフロアで記録したもの（または人を置いたもの）だけ出す
+        if (EXTRA.includes(zn) && !keptHas(z.dataset.floor, zn) && !v && !hc){ z.classList.add("od-xhide"); return; }
+        if (!v) return;
+        const zl = z.querySelector(".zl"); if (!zl) return;
+        const un = !hc;
+        if (un) z.classList.add("od-unz");
+        const e = document.createElement("em"); e.className = "od-z" + (un ? " un" : ""); e.textContent = nf(v); e.title = `ロケ ${zn} のオーダー ${nf(v)}` + (un ? "（未配置）" : ""); zl.insertAdjacentElement("afterend", e);
+      });
+      // 全フロア表示：フロア名の下と Pick 枠
+      document.querySelectorAll("#scroll section.x-fl").forEach(r => {
+        const x = byF[r.dataset.floor]; if (!x) return;
+        const tg = r.querySelector(".x-ftag");
+        if (tg){ const s = document.createElement("small"); s.className = "od-ft" + (x.total > 0 && (!x.hc || (S.hc && x.diff < -0.6)) ? " warn" : ""); s.innerHTML = `<i>オーダー</i><b>${nf(x.total)}</b>`; s.title = "オーダー数（クリックで詳細）"; s.onclick = open; tg.appendChild(s); }
+        // 全フロア表示の Pick 枠にはオーダー数・未配置は出さない（左のフロア名の下だけ）
+      });
+    } catch (e) { console.warn("オーダー表示", e); }
+  }
+  function paintAll(){ if (syncExtraZones()) render(); else decorate(); paintModal(); }
+
+  // 配置を描き直すたびに盤面のオーダー表示も付け直す
+  // 全フロア表示でも、フロアタブ・左のフロア名を押すとそのフロアの1フロア表示に切り替える
+  function floorNav(){
+    if (viewMode !== "multi") return;
+    const go = f => { curFloor = f; toggleViewMode(); };
+    document.querySelectorAll("#ftabs .ftab").forEach(t => { const f = t.firstChild && t.firstChild.textContent.trim(); t.onclick = () => go(f); t.title = f + " を表示"; });
+    document.querySelectorAll("#scroll section.x-fl .x-ftag").forEach(tg => {
+      const f = tg.closest("section.x-fl").dataset.floor;
+      tg.style.cursor = "pointer"; tg.title = f + " を表示";
+      tg.onclick = ev => { if (ev.target.closest(".od-ft")) return; go(f); };
+    });
+  }
+  /* ---------- C4 にあるロケを Pick のゾーンに自動で追加 ----------
+     盤面の固定ゾーン（R・Q・N…）にない文字（P など）が C4 に出てきたら、Pick のロケ一覧の最後に足す。
+     そのロケに人を置いているあいだは、C4 から消えても残す（置いた人が見えなくならないように）。
+     追加したロケは、オーダーも人もないフロアでは表示しない。 */
+  //  一度 C4 に出たロケは、そのフロアの追加ロケとして記録し、C4 から消えても残す（全PC共通）
+  const BASE_ZONES = typeof pickZoneNames === "function" ? pickZoneNames() : [];
+  const EXTRA = [];
+  const EXTRA_GROUP = {color:"#7c3aed", bg:"#f3e8ff", cols:2, zones:EXTRA, c4:true};
+  const ZKEY = "pickExtraZones", ZLS = "haichi_pick_extra";
+  let kept = {};   // {"5F":{"P":登録時刻}, ...}
+  try { kept = JSON.parse(localStorage.getItem(ZLS) || "{}") || {}; } catch (e) {}
+  const keptHas = (f, z) => !!(kept[f] && kept[f][z]);
+  function keepZone(f, z){
+    if (keptHas(f, z)) return;
+    (kept[f] = kept[f] || {})[z] = Date.now();
+    try { localStorage.setItem(ZLS, JSON.stringify(kept)); } catch (e) {}
+    if (raw()) raw().set(raw().rRef(`${ZKEY}/${f}/${z}`), kept[f][z]).catch(e => console.warn("追加ロケの保存", e));
+  }
+  function watchKept(){
+    if (!raw() || !raw().onValue) return;
+    raw().onValue(raw().rRef(ZKEY), snap => {
+      const v = snap.val() || {};
+      // 他のPCで足したロケも取り込む（このPCで足したばかりのものは残す）
+      Object.keys(kept).forEach(f => Object.keys(kept[f]).forEach(z => { (v[f] = v[f] || {}); if (!v[f][z]) v[f][z] = kept[f][z]; }));
+      kept = v;
+      try { localStorage.setItem(ZLS, JSON.stringify(kept)); } catch (e) {}
+      if (syncExtraZones()) render(); else decorate();
+    });
+  }
+  function syncExtraZones(){
+    if (!PICK_ZONE_LAYOUT || !PICK_ZONE_LAYOUT.enabled) return false;
+    // C4 に出てきたロケをフロアごとに記録
+    if (data){ const c = cols(); FLOORS.forEach(f => rowsOf(f).forEach(r => { const z = zoneOf(r, c); if (z && !BASE_ZONES.includes(z)) keepZone(f, z); })); }
+    const want = new Set();
+    Object.keys(kept).forEach(f => Object.keys(kept[f] || {}).forEach(z => want.add(z)));
+    const pre = "OUT|" + PICK_ZONE_LAYOUT.secName + "|";
+    Object.values(layout || {}).forEach(v => { if (typeof v === "string" && v.indexOf(pre) === 0){ const z = v.slice(pre.length); if (z) want.add(z); } });
+    const next = [...want].filter(z => !BASE_ZONES.includes(z)).sort();
+    if (next.join() === EXTRA.join()) return false;
+    EXTRA.splice(0, EXTRA.length, ...next);
+    const has = PICK_ZONE_LAYOUT.bottom.includes(EXTRA_GROUP);
+    if (EXTRA.length && !has) PICK_ZONE_LAYOUT.bottom.push(EXTRA_GROUP);
+    if (!EXTRA.length && has) PICK_ZONE_LAYOUT.bottom.splice(PICK_ZONE_LAYOUT.bottom.indexOf(EXTRA_GROUP), 1);
+    return true;
+  }
+
+  const _render = render;
+  render = function(){ syncExtraZones(); const r = _render.apply(this, arguments); decorate(); floorNav(); return r; };
+
+  // 起動：Firebase につながったら設定を読み、3分ごとに読み直す（画面が裏のときは休む）
+  (function boot(n){
+    if (!raw()){ if (n < 60) setTimeout(() => boot(n + 1), 1000); return; }
+    loadCfg().then(() => { watchFirebase(); watchKept(); decorate(); refresh(true); });
+  })(0);
+  setInterval(() => { if (!document.hidden) refresh(true); }, POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - lastFetch > POLL_MS) refresh(true); });
+  setInterval(decorate, 60000);   // 「何分前」と古さの色を更新
+  setTimeout(decorate, 300);
+
+  return {open, close, refresh, editCfg, setCol, decorate, _stats: stats, _set: d => { data = d; paintAll(); }};
 })();
 </script>
 
