@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.4";
+const APP_VERSION="2026.11.20.5";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5143,6 +5143,10 @@ body.od-stats-closed #stats{display:none}
 #odCpt .cc.zero .v b{color:#cbd5e1}
 #odCpt .cc.done{opacity:.55}
 #odStatsBtn{align-self:stretch;height:auto !important}
+#odFut{flex:none;align-self:stretch;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;background:var(--panel,#fff);font-size:11.5px;font-weight:700;color:var(--txt,#0f172a);cursor:pointer;user-select:none;white-space:nowrap}
+#odFut input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#0f766e}
+#odFut.off{color:#64748b}
+#odCpt .cc.excl{opacity:.35}
 .od-cpt-mini{display:inline-flex;flex-wrap:wrap;gap:3px;font-size:11px;font-weight:700;color:#475569}
 .od-cpt-mini span{border:1px solid #cbd5e1;border-radius:5px;padding:0 5px;background:#fff;white-space:nowrap}
 .od-cpt-mini span b{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#0f172a;margin-left:3px}
@@ -5333,11 +5337,18 @@ window.ODR = (function(){
       set(closed);
       btn.onclick = () => { const c = !document.body.classList.contains("od-stats-closed"); set(c); try { localStorage.setItem("haichi_stats_open", c ? "0" : "1"); } catch (e) {} if (typeof X_sizeMain === "function"){ const m = document.querySelector("#scroll .x-main"); if (m) X_sizeMain(m); } };
       el = document.createElement("div"); el.id = "odCpt";
-      bar.append(btn, el);
+      // 右に「Future含む」チェック：外すと Future CPT を除いた数で、ゾーン・フロア・オーダー画面もすべて数える（全PC共通）
+      const fut = document.createElement("label"); fut.id = "odFut"; fut.title = "外すと Future CPT を除いた当日分で数えます（ゾーン・フロアの数も同じ）";
+      fut.innerHTML = `<input type="checkbox"><span>Future含む</span>`;
+      fut.querySelector("input").onchange = ev => setCol(ev.target.checked ? "__sum" : "__today");
+      bar.append(btn, el, fut);
       const st = document.getElementById("stats"); (st ? st.parentNode : document.body).insertBefore(bar, st ? st.nextSibling : null);
     }
-    if (!data || (window.X_NEXT && X_NEXT.on)){ el.innerHTML = ""; return; }
-    const L = cpts(); if (!L.length){ el.innerHTML = ""; return; }
+    const futEl = document.getElementById("odFut");
+    if (!data || (window.X_NEXT && X_NEXT.on)){ el.innerHTML = ""; if (futEl) futEl.style.display = "none"; return; }
+    const L = cpts(); if (!L.length){ el.innerHTML = ""; if (futEl) futEl.style.display = "none"; return; }
+    const M = metric();
+    if (futEl){ futEl.style.display = ""; const on = M.key !== "__today"; futEl.querySelector("input").checked = on; futEl.classList.toggle("off", !on); }
     // 1段にまとめる：1フロア表示は「そのフロア／全体」、全フロア表示は「全体」だけ
     const single = viewMode !== "multi", fr = single ? rowsOf(curFloor) : null, al = allRows();
     el.title = "CPT別のオーダー数（クリックで詳細）";
@@ -5348,7 +5359,7 @@ window.ODR = (function(){
     el.innerHTML = `<div class="ct" style="${single ? `background:hsl(${floorHue(curFloor)},55%,42%)` : ""}">CPT<small>${single ? esc(curFloor) + "／全体" : "全体"}</small></div>` + L.map(x => {
       const v = single ? cptSum(fr, x.i) : cptSum(al, x.i), a = cptSum(al, x.i);
       const av = single ? cptSum(fa, x.i) : cptSum(aa, x.i), aA = cptSum(aa, x.i);
-      return `<div class="cc ${cptCls(x, v)}" title="${esc(x.h.replace(/\n/g, " "))}${single ? `\n${curFloor}：${nf(v)}（Air ${nf(av)}）　全体：${nf(a)}（Air ${nf(aA)}）` : `\n全体：${nf(a)}（Air ${nf(aA)}）`}">`
+      return `<div class="cc ${cptCls(x, v)}${M.idx.includes(x.i) ? "" : " excl"}" title="${esc(x.h.replace(/\n/g, " "))}${single ? `\n${curFloor}：${nf(v)}（Air ${nf(av)}）　全体：${nf(a)}（Air ${nf(aA)}）` : `\n全体：${nf(a)}（Air ${nf(aA)}）`}">`
         + `<span class="l">${esc(x.label)}${x.next ? "・" + leftTxt(x) : ""}</span>`
         + `<span class="v"><b>${nf(v)}</b>${single ? `／${nf(a)}` : ""}</span>`
         + `<span class="a"><em>Air</em>${nf(av)}${single ? `／${nf(aA)}` : ""}</span></div>`;
