@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.13";
+const APP_VERSION="2026.11.20.14";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5143,9 +5143,10 @@ body.od-stats-closed #stats{display:none}
 #odCpt .cc.zero .v b{color:#cbd5e1}
 #odCpt .cc.done{opacity:.55}
 #odStatsBtn{align-self:stretch;height:auto !important}
-.x-nbar.od-in{margin:0 0 0 auto !important;padding:4px 10px !important;gap:8px !important;flex-wrap:nowrap !important;white-space:nowrap;font-size:12px !important;align-self:stretch;min-width:0}
-.x-nbar.od-in b{font-size:13px !important}
-.x-nbar.od-in button.pro{padding:4px 10px !important;font-size:12px !important}
+.x-nbar.od-in{margin:0 0 0 auto !important;padding:3px 6px 3px 10px !important;gap:6px !important;flex-wrap:nowrap !important;white-space:nowrap;font-size:11.5px !important;align-self:stretch;min-width:0}
+.x-nbar.od-in b{font-size:12.5px !important}
+.x-nbar.od-in .x-imp{padding:2px 7px !important;font-size:11px !important}
+.x-nbar.od-in button{padding:3px 8px !important;font-size:11.5px !important}
 .x-nbar.od-in .sp{display:none}
 #odFut{flex:none;align-self:stretch;display:flex;align-items:center;gap:6px;padding:0 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;background:var(--panel,#fff);font-size:11.5px;font-weight:700;color:var(--txt,#0f172a);cursor:pointer;user-select:none;white-space:nowrap}
 #odFut input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#0f766e}
@@ -5388,13 +5389,29 @@ window.ODR = (function(){
     return `<span class="od-cpt-mini">${cpts().map(x => { const v = cptSum(rows, x.i); return `<span class="${cptCls(x, v)}" title="${esc(x.h.replace(/\n/g, " "))}${x.next ? "（次のCPT・" + leftTxt(x) + "）" : ""}">${esc(x.label)}<b>${nf(v)}</b></span>`; }).join("")}</span>`;
   }
   // 画面下（凡例のあった場所）：CPT 別の数。1フロア表示は「そのフロア」と「全体」、全フロア表示は「全体」
+  // 翌日の帯：CPT の行の右に置き、文字を短くして1行に収める（全文はマウスを乗せると出る）
+  //  例）翌日 11/21（土）作成中・5:00自動反映 ｜ 取込 11/20 18:27 日52・夜23 ｜［当日に反映］
+  function compactNextBar(nb){
+    const sp = [...nb.querySelectorAll(":scope > span")].find(x => /作成中/.test(x.textContent));
+    if (sp && sp.textContent !== "作成中・5:00自動反映"){ sp.dataset.full = sp.textContent; sp.textContent = "作成中・5:00自動反映"; }
+    const im = document.getElementById("xNbImp");
+    if (im && /取込済み|日勤|夜勤/.test(im.textContent)){
+      im.title = im.textContent;
+      im.textContent = im.textContent.replace(/取込済み[:：]\s*/, "取込 ").replace(/（日勤(\d+)名・夜勤(\d+)名）/, " 日$1・夜$2");
+    }
+    const pro = document.getElementById("xNbPro");
+    if (pro && pro.dataset.arm !== "1" && /分を当日に反映$/.test(pro.textContent)){ pro.title = pro.textContent; pro.textContent = "当日に反映"; }
+    const t = document.getElementById("xNbTitle");
+    nb.title = `翌日 ${t ? t.textContent : ""} の配置を作成中です。当日の配置には反映されません（その日の朝5:00に自動で当日に反映）。` + (im && im.title ? "\n" + im.title : "");
+  }
+  let nbObs = null;
   function placeNextBar(){
     const nb = document.getElementById("xNbar"), bar = document.getElementById("odBar");
     if (!nb || !bar) return;
     if (nb.parentNode !== bar){ bar.appendChild(nb); nb.classList.add("od-in"); }
-    // 長い説明は短くして、全文はマウスを乗せたときに出す
-    const sp = [...nb.querySelectorAll(":scope > span")].find(x => /作成中/.test(x.textContent) && !x.dataset.full);
-    if (sp){ sp.dataset.full = sp.textContent; nb.title = "翌日" + (document.getElementById("xNbTitle") || {}).textContent + sp.textContent; sp.textContent = "の配置を作成中（朝5:00に自動で当日へ反映）"; }
+    compactNextBar(nb);
+    // 帯の中身は Firebase の更新で書き換わるので、そのたびに短くし直す
+    if (!nbObs && window.MutationObserver){ nbObs = new MutationObserver(() => { nbObs.disconnect(); compactNextBar(nb); nbObs.observe(nb, {childList: true, subtree: true, characterData: true}); }); nbObs.observe(nb, {childList: true, subtree: true, characterData: true}); }
   }
   function paintCptBar(){
     let el = document.getElementById("odCpt");
