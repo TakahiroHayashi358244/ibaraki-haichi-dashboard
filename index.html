@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.6";
+const APP_VERSION="2026.11.20.7";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5245,7 +5245,6 @@ table.od-t td.bar{width:24%;min-width:140px}
       <h2>階層別オーダー（C4）</h2>
       <div class="modal-head-actions">
         <button class="btn refresh-btn" onclick="ODR.refresh(true)" title="スプレッドシートから読み直す"><span class="rf-icon">↻</span> 更新</button>
-        <button class="btn" style="opacity:.6" onclick="ODR.editCfg()" title="予備：スプレッドシート（GAS）から読むときの設定。通常は不要">予備の読み込み先</button>
         <button class="modal-x" onclick="ODR.close()">×</button>
       </div>
     </div>
@@ -5474,7 +5473,7 @@ window.ODR = (function(){
     const body = document.getElementById("orderBody");
     if (!body || !document.getElementById("orderModal").classList.contains("open")) return;
     if (!data){
-      body.innerHTML = `<div class="od-empty">${esc(err || (loading ? "読み込み中…" : "まだデータがありません"))}<br>C4の画面（Tampermonkey v2.5）からの送信を待っています。</div>`;
+      body.innerHTML = `<div class="od-empty">${esc(err || (loading ? "読み込み中…" : "まだデータがありません"))}<br>C4の画面（Tampermonkey「C4/HFO Order Sync」v3.0）からの送信を待っています。</div>`;
       return;
     }
     const S = stats(), a = ageMin();
