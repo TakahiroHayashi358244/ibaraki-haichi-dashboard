@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.5";
+const APP_VERSION="2026.11.20.6";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5152,6 +5152,13 @@ body.od-stats-closed #stats{display:none}
 .od-cpt-mini span b{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#0f172a;margin-left:3px}
 .od-cpt-mini span.next{border-color:#fb923c;background:#fff7ed;color:#c2410c}.od-cpt-mini span.next b{color:#c2410c}
 .od-cpt-mini span.late{border-color:#fca5a5;background:#fef2f2;color:#dc2626}.od-cpt-mini span.late b{color:#dc2626}
+/* 画面が狭いとき：左のシステム名（アプリ切り替え）は消さない。オーダー表示のほうを先に詰める */
+header.hc5 .app-title{display:flex !important}
+header.hc2 .ftab .od-badge{font-size:11px;padding:0 4px;margin-left:3px}
+header.hc3 .btn.order{padding-left:8px;padding-right:8px}
+header.hc4 .btn.order .ol{display:none}
+header.hc5 .ftab .od-badge{font-size:10.5px;padding:0 3px;letter-spacing:-.5px}
+header.hc6 .zoom-ctrl{display:none}
 /* OUT と IN は同じ幅 */
 .x-single{grid-template-columns:minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.75fr) !important}
 .x-fl{grid-template-columns:54px minmax(0,1.5fr) minmax(0,1.5fr) minmax(0,.5fr) minmax(0,.55fr) !important}
@@ -5294,8 +5301,11 @@ window.ODR = (function(){
     });
     return {h, iPP: iPP < 0 ? 0 : iPP, iPA: iPA < 0 ? 1 : iPA, nums};
   }
+  // 数える列（Future含む を含む）は PC ごとに覚える。未設定なら全PC共通の設定、それもなければ全部の合計
+  const COL_LS = "haichi_order_col";
+  const localCol = () => { try { return localStorage.getItem(COL_LS) || ""; } catch (e) { return ""; } };
   function metric(){
-    const c = cols(), want = cfg && cfg.col;
+    const c = cols(), want = localCol() || (cfg && cfg.col);
     if (want === "__sum") return {key: "__sum", label: "数値列の合計", idx: c.nums};
     if (want === "__today") return {key: "__today", label: "当日CPT分（Future CPT以外）", idx: c.nums.filter(i => !/future/i.test(c.h[i]))};
     if (want){ const i = c.h.indexOf(want); if (i >= 0 && c.nums.includes(i)) return {key: want, label: want, idx: [i]}; }
@@ -5337,8 +5347,8 @@ window.ODR = (function(){
       set(closed);
       btn.onclick = () => { const c = !document.body.classList.contains("od-stats-closed"); set(c); try { localStorage.setItem("haichi_stats_open", c ? "0" : "1"); } catch (e) {} if (typeof X_sizeMain === "function"){ const m = document.querySelector("#scroll .x-main"); if (m) X_sizeMain(m); } };
       el = document.createElement("div"); el.id = "odCpt";
-      // 右に「Future含む」チェック：外すと Future CPT を除いた数で、ゾーン・フロア・オーダー画面もすべて数える（全PC共通）
-      const fut = document.createElement("label"); fut.id = "odFut"; fut.title = "外すと Future CPT を除いた当日分で数えます（ゾーン・フロアの数も同じ）";
+      // 右に「Future含む」チェック：外すと Future CPT を除いた数で、ゾーン・フロア・オーダー画面もすべて数える（このPCだけ）
+      const fut = document.createElement("label"); fut.id = "odFut"; fut.title = "外すと Future CPT を除いた当日分で数えます（ゾーン・フロアの数も同じ。このPCだけ）";
       fut.innerHTML = `<input type="checkbox"><span>Future含む</span>`;
       fut.querySelector("input").onchange = ev => setCol(ev.target.checked ? "__sum" : "__today");
       bar.append(btn, el, fut);
@@ -5454,7 +5464,7 @@ window.ODR = (function(){
     alert("保存しました（全PC共通）");
     refresh(true);
   }
-  async function setCol(v){ await saveCfg({col: v}); paintAll(); }
+  function setCol(v){ try { localStorage.setItem(COL_LS, v); } catch (e) {} paintAll(); }
 
   /* ---------- 画面 ---------- */
   function open(){ document.getElementById("orderModal").classList.add("open"); paintModal(); refresh(true); }
@@ -5553,7 +5563,7 @@ window.ODR = (function(){
     }
     const S = data ? stats() : null;
     b.classList.toggle("stale", !data || isStale());
-    b.innerHTML = `オーダー${S ? `<span class="ob">${nf(S.total)}</span>` : ""}`;
+    b.innerHTML = `<span class="ol">オーダー</span>${S ? `<span class="ob">${nf(S.total)}</span>` : ""}`;
   }
   function decorate(){
     try {
