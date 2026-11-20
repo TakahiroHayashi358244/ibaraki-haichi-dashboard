@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.20.7";
+const APP_VERSION="2026.11.20.8";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5220,7 +5220,18 @@ table.od-t td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:rig
 table.od-t tr.tot td{font-weight:800;background:#fffbea}
 table.od-t td.oc{font-size:17px;font-weight:900;color:#0f766e}
 table.od-t td .fl{display:inline-block;color:#fff;font-weight:800;border-radius:6px;padding:1px 9px;font-family:inherit}
-table.od-t td.bar{width:24%;min-width:140px}
+table.od-t td.bar{width:34%;min-width:260px}
+.od-lg{display:flex;flex-wrap:wrap;gap:12px;margin:0 0 6px;font-weight:700;font-size:11px;color:var(--sub)}
+.od-lg span{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.od-lg i{display:inline-block;width:10px;height:10px;border-radius:2px}
+.od-sbar{display:flex;align-items:center;gap:8px}
+.od-sbar .in{display:flex;height:26px;border-radius:6px;overflow:hidden;background:var(--panel2)}
+.od-sbar .in i{display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-style:normal;line-height:1.05;min-width:0;overflow:hidden;border-right:1px solid rgba(255,255,255,.6)}
+.od-sbar .in i:last-child{border-right:none}
+.od-sbar .in b{font-size:12px;font-weight:900;font-family:ui-monospace,Menlo,monospace}
+.od-sbar .in small{font-size:9px;font-weight:700;opacity:.9}
+.od-sbar .t{font-size:12px;font-weight:800;color:var(--txt);font-family:ui-monospace,Menlo,monospace}
+.od-sbar.empty{color:var(--sub);font-size:11px}
 .od-bar{position:relative;height:16px;background:var(--panel2);border-radius:5px;overflow:hidden}
 .od-bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px}
 .od-bar span{position:absolute;right:6px;top:0;font-size:10.5px;line-height:16px;color:var(--txt);font-weight:700}
@@ -5329,6 +5340,22 @@ window.ODR = (function(){
     return list;
   }
   const cptSum = (rows, i) => rows.reduce((s, r) => s + num(r[i]), 0);
+  // 当日分（Future を除く）の CPT とその色
+  const CPT_COLORS = ["#0f766e", "#2563eb", "#7c3aed", "#d97706", "#db2777", "#0891b2", "#65a30d"];
+  const todayCpts = () => cpts().filter(x => !x.future);
+  const cptColor = (x, k) => /passed/i.test(x.h) ? "#dc2626" : CPT_COLORS[k % CPT_COLORS.length];
+  function cptLegend(){
+    return todayCpts().map((x, k) => `<span><i style="background:${cptColor(x, k)}"></i>${esc(x.label)}</span>`).join("");
+  }
+  // 横の積み上げ帯：長さ＝当日分の合計（max に対する割合。max=0 なら満幅）、区切り＝CPTごとの比率
+  function cptBar(rows, max){
+    const L = todayCpts(), vals = L.map(x => cptSum(rows, x.i)), tot = vals.reduce((a, b) => a + b, 0);
+    if (!tot) return `<div class="od-sbar empty">当日分なし</div>`;
+    const w = max ? tot / max * 100 : 100;
+    const segs = L.map((x, k) => { const v = vals[k]; if (!v) return ""; const pct = v / tot * 100;
+      return `<i style="width:${pct}%;background:${cptColor(x, k)}" title="${esc(x.label)}：${nf(v)}個（${pct.toFixed(1)}%）">${(w / 100) * (pct / 100) * 320 >= 30 ? `<b>${nf(v)}</b><small>${Math.round(pct)}%</small>` : ""}</i>`; }).join("");
+    return `<div class="od-sbar"><div class="in" style="width:${Math.max(w, 8).toFixed(1)}%">${segs}</div><span class="t">${nf(tot)}</span></div>`;
+  }
   const cptCls = (x, v) => (x.passed && v > 0 ? "late" : x.next ? "next" : "") + (v ? "" : " zero") + (x.passed && !v ? " done" : "");
   const leftTxt = x => { if (!x.t) return ""; const m = Math.round((x.t - Date.now()) / 60000); return m >= 0 ? `あと${m >= 60 ? Math.floor(m / 60) + "時間" + (m % 60 ? (m % 60) + "分" : "") : m + "分"}` : ""; };
   function cptMini(rows){
@@ -5481,6 +5508,7 @@ window.ODR = (function(){
     const opt = [`<option value="__sum"${S.m.key === "__sum" ? " selected" : ""}>数値列の合計</option>`, `<option value="__today"${S.m.key === "__today" ? " selected" : ""}>当日CPT分（Future CPT以外）</option>`]
       .concat(S.c.nums.map(i => `<option value="${esc(S.c.h[i])}"${S.m.key === S.c.h[i] ? " selected" : ""}>${esc(String(S.c.h[i]).replace(/\s*\n\s*/g, " "))}</option>`)).join("");
     const maxT = Math.max(1, ...S.fs.map(x => x.total));
+    const maxToday = Math.max(1, ...S.fs.map(x => todayCpts().reduce((s, c) => s + cptSum(x.rows, c.i), 0)));
     const hasUph = S.fs.some(x => x.perH);
     let h = `<div class="od-top">
       <span class="st ${isStale() ? "ng" : "ok"}">${esc(stTxt)}${isStale() ? "　更新が止まっています（C4画面のTampermonkeyを確認）" : ""}</span>
@@ -5496,26 +5524,26 @@ window.ODR = (function(){
       <div class="od-kpi"><div class="l">Pick 処理能力</div><div class="v">${S.perH ? nf(S.perH) : "—"}<small>/h</small></div><div class="s">過去30日UPHの合計</div></div>
       <div class="od-kpi"><div class="l">いちばん時間がかかるフロア</div><div class="v">${S.worst ? S.worst.f + " " + hrsTxt(S.worst.hrs) : "—"}</div><div class="s">${S.noPick.length ? `<b style="color:#b91c1c">Pick配置なし：${S.noPick.join("・")}</b>` : S.worst ? endTxt(S.worst.hrs) + " ごろ消化（全体を均した場合 " + hrsTxt(S.hrs) + "）" : "Pick配置・UPHがあると計算"}</div></div>
     </div>`;
-    h += `<table class="od-t"><thead><tr><th>フロア</th><th>オーダー</th><th>構成比</th><th>Pick 人数</th><th>Pick LH</th><th>処理能力/h</th><th>消化見込み</th><th>1人あたり</th><th>目安人数</th><th>過不足</th><th style="text-align:left">未配置ロケ</th></tr></thead><tbody>`;
+    h += `<div class="od-lg">当日CPT：${cptLegend()}</div>`;
+    h += `<table class="od-t"><thead><tr><th>フロア</th><th>オーダー</th><th style="text-align:left">当日CPT別の個数・比率</th><th>Pick 人数</th><th>Pick LH</th><th>処理能力/h</th><th>消化見込み</th><th>1人あたり</th><th>目安人数</th><th>過不足</th></tr></thead><tbody>`;
     S.fs.forEach(x => {
       const col = `hsl(${floorHue(x.f)},55%,42%)`;
       const pm = Math.round(x.diff * 10) / 10;
       h += `<tr><td><span class="fl" style="background:${col}">${x.f}</span></td>
         <td class="oc">${nf(x.total)}</td>
-        <td class="bar"><div class="od-bar"><i style="width:${(x.total / maxT * 100).toFixed(1)}%;background:${col};opacity:.75"></i><span>${(x.share * 100).toFixed(1)}%</span></div></td>
+        <td class="bar">${cptBar(x.rows, maxToday)}</td>
         <td>${x.hc}</td><td>${fmtLHval(x.lh)}</td>
         <td>${x.perH ? nf(x.perH) : "—"}</td>
         <td>${!x.total ? "—" : x.hc ? hrsTxt(x.hrs) + (x.hrs != null ? `<br><small style="color:var(--sub)">${endTxt(x.hrs)}</small>` : "") : `<b style="color:#b91c1c">配置なし</b>`}</td>
         <td>${x.hc ? nf(x.total / x.hc) : "—"}</td>
         <td>${S.hc ? (Math.round(x.target * 10) / 10).toFixed(1) : "—"}</td>
-        <td>${S.hc && S.total ? `<span class="od-pm ${pm > 0.4 ? "plus" : pm < -0.4 ? "minus" : ""}">${pm > 0 ? "+" : ""}${pm.toFixed(1)}</span>` : "—"}</td>
-        <td style="text-align:left;white-space:normal">${x.unplaced.length ? x.unplaced.map(([z, v]) => `<span class="od-un">${esc(z)} <b>${nf(v)}</b></span>`).join("") : '<span style="color:var(--sub)">なし</span>'}</td></tr>`;
+        <td>${S.hc && S.total ? `<span class="od-pm ${pm > 0.4 ? "plus" : pm < -0.4 ? "minus" : ""}">${pm > 0 ? "+" : ""}${pm.toFixed(1)}</span>` : "—"}</td></tr>`;
     });
-    h += `<tr class="tot"><td>合計</td><td>${nf(S.total)}</td><td></td><td>${S.hc}</td><td>${fmtLHval(S.lh)}</td><td>${S.perH ? nf(S.perH) : "—"}</td><td>${hrsTxt(S.hrs)}</td><td>${S.hc ? nf(S.total / S.hc) : "—"}</td><td>${S.hc}</td><td></td><td style="text-align:left">${(u => u ? nf(u) : "")(S.fs.reduce((s, x) => s + x.unplacedSum, 0))}</td></tr>`;
+    h += `<tr class="tot"><td>合計</td><td>${nf(S.total)}</td><td class="bar">${cptBar(allRows(), 0)}</td><td>${S.hc}</td><td>${fmtLHval(S.lh)}</td><td>${S.perH ? nf(S.perH) : "—"}</td><td>${hrsTxt(S.hrs)}</td><td>${S.hc ? nf(S.total / S.hc) : "—"}</td><td>${S.hc}</td><td></td></tr>`;
     h += `</tbody></table>
       <div class="od-note">・Pick 人数／LH は、今の配置で各フロアの OUTBOUND「Pick」工程（ゾーン含む）にいる人です（管理者・待機・欠勤・休日は除く）。<br>
       ・処理能力/h は、その人たちの過去30日 Pick UPH の合計（実績がない人は Pick の全体平均）。消化見込み＝オーダー ÷ 処理能力/h（数える列がユニット数のときの目安）。${hasUph ? "" : "<b>UPHがまだ読み込まれていないため計算できません。</b>"}<br>
-      ・未配置ロケ＝オーダーがあるのに、そのゾーンに誰も配置していないロケ（盤面にゾーン枠がない P なども含む）。<br>
+      ・当日CPT別＝Passed と当日の各CPT（Future は除く）の個数。帯の長さは当日分の多さ（いちばん多いフロアが満幅）、中の区切りはCPTごとの比率です（合計行は全体の比率）。<br>
       ・目安人数＝Pick の総人数をオーダー比で配分した人数。過不足が <span class="od-pm minus">マイナス</span> のフロアは人が足りず、<span class="od-pm plus">プラス</span> のフロアは余裕があります。</div>`;
 
     // CPT 別 × フロア
