@@ -2698,7 +2698,7 @@ function deleteCustom(no){
 }
 
 // ===== 設定 =====
-const APP_VERSION="2026.11.21.1";
+const APP_VERSION="2026.11.21.2";
 // ボード表示倍率 (0.5〜1.8) ── localStorage で永続化、Ctrl+ホイールでも操作可
 let curZoom=parseFloat(localStorage.getItem("haichi3_zoom")||"1")||1;
 if(curZoom<0.5||curZoom>1.8)curZoom=1;
@@ -5210,6 +5210,8 @@ header.hc6 .zoom-ctrl{display:none}
 .x-ftag .od-ft.warn{color:#dc2626}
 #orderModal .modal{max-width:1180px}
 .od-top{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px;font-size:12px;color:var(--sub)}
+.od-top label.od-fut{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line,#e5e7eb);border-radius:8px;background:var(--panel,#fff);font-weight:800;color:var(--txt,#0f172a);cursor:pointer;user-select:none;white-space:nowrap}
+.od-top label.od-fut input{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#0f766e}
 .od-top .st{font-weight:800}
 .od-top .st.ok{color:#0f766e}.od-top .st.ng{color:#b91c1c}
 .od-top select{font-family:inherit;font-size:12px;padding:4px 8px;border-radius:7px;border:1px solid var(--line);background:var(--panel)}
@@ -5579,6 +5581,7 @@ window.ODR = (function(){
       ${err ? `<span class="st ng">${esc(err)}</span>` : ""}
       ${data.sender && data.sender.name ? `<span>送信端末：<b>${esc(data.sender.name)}</b></span>` : ""}
       <span class="sp"></span>
+      <label class="od-fut"><input type="checkbox" ${S.m.key !== "__today" ? "checked" : ""} onchange="ODR.setCol(this.checked ? '__sum' : '__today')">シフト外も含む</label>
       <label>数える列 <select onchange="ODR.setCol(this.value)">${opt}</select></label>
       <span>配置は <b>${esc(curShift)}</b> で計算</span>
     </div>`;
